@@ -1,0 +1,84 @@
+# Si535x Registers Script
+# 
+# Part: Si5351A
+# Project File: C:\Users\Wei\Desktop\Si5351A-RevB-Project.slabtimeproj
+# Includes Pre/Post Download Control Register Writes: Yes
+# Creator: ClockBuilder Pro v2.43 [2020-03-31]
+# Created On: 2020-04-08 18:00:20 GMT+08:00
+# Address,Data
+2,13h
+3,00h
+4,00h
+7,01h
+15,00h
+16,0Fh
+17,6Fh
+18,4Fh
+19,8Ch
+20,8Ch
+21,8Ch
+22,8Ch
+23,8Ch
+24,24h
+26,00h
+27,01h
+28,00h
+29,0Eh
+30,00h
+31,00h
+32,00h
+33,00h
+34,00h
+35,05h
+36,00h
+37,0Dh
+38,99h
+39,00h
+40,00h
+41,03h
+42,00h
+43,03h
+44,00h
+45,12h
+46,D5h
+47,00h
+48,00h
+49,01h
+50,00h
+51,01h
+52,00h
+53,01h
+54,00h
+55,00h
+56,00h
+57,00h
+58,00h
+59,01h
+60,0Ch
+61,00h
+62,00h
+63,00h
+64,00h
+65,00h
+90,00h
+91,00h
+149,81h
+150,52h
+151,7Fh
+152,FFh
+153,00h
+154,00h
+155,C6h
+156,00h
+157,00h
+158,00h
+159,01h
+160,00h
+161,00h
+162,00h
+163,00h
+164,00h
+165,13h
+166,06h
+167,00h
+183,92h
