@@ -91,7 +91,7 @@ class Device:
         raise NotImplementedError()
 
 
-    def enable(self, value):
+    def enable(self, value = True):
         self._action = 'enable {}'.format(value)
         self._enabled = value
         self.enable_output(value)
@@ -229,6 +229,6 @@ class Device:
 
 
     def _read_element_by_name(self, element_name):
-        d = self.map.elements[element_name]
-        reg = d['register']
-        return self._read_n_load_register(reg)
+        reg = self.map.elements[element_name]['register']
+        self._read_n_load_register(reg)
+        return reg.elements[element_name]

@@ -2,946 +2,321 @@
 # https://www.silabs.com/documents/public/application-notes/AN619.pdf
 
 
+from .registers_map import _get_registers_map
+
+
 try:
     from ..interfaces import *
-    from utilities.register import RegistersMap, Register, Element, array
     from utilities.adapters.peripherals import I2C
 except:
     from interfaces import *
-    from register import RegistersMap, Register, Element, array
     from peripherals import I2C
 
 
 
-def _get_all_raw_registers():
-    registers = []
-
-    registers.append(Register(name = 'Device_Status', address = 0, description = 'Device_Status',
-                              elements = [Element(name = 'SYS_INIT', idx_lowest_bit = 7, n_bits = 1, value = 0,
-                                                  description = 'System Initialization Status.'),
-                                          Element(name = 'LOL_B', idx_lowest_bit = 6, n_bits = 1, value = 0,
-                                                  description = 'PLLB Loss Of Lock Status.'),
-                                          Element(name = 'LOL_A', idx_lowest_bit = 5, n_bits = 1, value = 0,
-                                                  description = 'PLL A Loss Of Lock Status.'),
-                                          Element(name = 'LOS_CLKIN', idx_lowest_bit = 4, n_bits = 1, value = 0,
-                                                  description = 'CLKIN Loss Of Signal (Si5351C Only).'),
-                                          Element(name = 'LOS_XTAL', idx_lowest_bit = 3, n_bits = 1, value = 0,
-                                                  description = 'Crystal Loss of Signal'),
-                                          Element(name = 'Reserved_2', idx_lowest_bit = 2, n_bits = 1, value = 0,
-                                                  read_only = True, description = 'Leave as default.'),
-                                          Element(name = 'REVID', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                                  description = 'Revision number of the device.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Interrupt_Status_Sticky', address = 1, description = 'Interrupt_Status_Sticky',
-                              elements = [Element(name = 'SYS_INIT_STKY', idx_lowest_bit = 7, n_bits = 1, value = 0,
-                                                  description = 'System Calibration Status Sticky Bit.'),
-                                          Element(name = 'LOL_B_STKY', idx_lowest_bit = 6, n_bits = 1, value = 0,
-                                                  description = 'PLLB Loss Of Lock Status Sticky Bit.'),
-                                          Element(name = 'LOL_A_STKY', idx_lowest_bit = 5, n_bits = 1, value = 0,
-                                                  description = 'PLLA Loss Of Lock Status Sticky Bit.'),
-                                          Element(name = 'LOS_CLKIN_STKY', idx_lowest_bit = 4, n_bits = 1, value = 0,
-                                                  description = 'CLKIN Loss Of Signal Sticky Bit (Si5351C Only).'),
-                                          Element(name = 'LOS_XTAL_STKY', idx_lowest_bit = 3, n_bits = 1, value = 0,
-                                                  description = 'Crystal Loss of Signal Sticky Bit'),
-                                          Element(name = 'Reserved_0', idx_lowest_bit = 0, n_bits = 3, value = 0,
-                                                  read_only = True, description = 'Leave as default.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Interrupt_Status_Mask', address = 2, description = 'Interrupt_Status_Mask',
-                              elements = [Element(name = 'SYS_INIT_MASK', idx_lowest_bit = 7, n_bits = 1, value = 0,
-                                                  description = 'System Initialization Status Mask.'),
-                                          Element(name = 'LOL_B_MASK', idx_lowest_bit = 6, n_bits = 1, value = 0,
-                                                  description = 'PLLB Loss Of Lock Status Mask.'),
-                                          Element(name = 'LOL_A_MASK', idx_lowest_bit = 5, n_bits = 1, value = 0,
-                                                  description = 'PLL A Loss Of Lock Status Mask.'),
-                                          Element(name = 'LOS__CLKIN_MASK', idx_lowest_bit = 4, n_bits = 1, value = 0,
-                                                  description = 'CLKIN Loss Of Signal Mask (Si5351C Only).'),
-                                          Element(name = 'LOS__XTAL_MASK', idx_lowest_bit = 3, n_bits = 1, value = 0,
-                                                  description = 'Crystal Loss of Signal Mask'),
-                                          Element(name = 'Reserved_0', idx_lowest_bit = 0, n_bits = 3, value = 0,
-                                                  read_only = True, description = 'Leave as default.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Output_Enable_Control', address = 3, description = 'Output_Enable_Control',
-                              elements = [Element(name = 'CLK7_OEB', idx_lowest_bit = 7, n_bits = 1, value = 0,
-                                                  description = 'Output Disable for CLK7.'),
-                                          Element(name = 'CLK6_OEB', idx_lowest_bit = 6, n_bits = 1, value = 0,
-                                                  description = 'Output Disable for CLK6.'),
-                                          Element(name = 'CLK5_OEB', idx_lowest_bit = 5, n_bits = 1, value = 0,
-                                                  description = 'Output Disable for CLK5.'),
-                                          Element(name = 'CLK4_OEB', idx_lowest_bit = 4, n_bits = 1, value = 0,
-                                                  description = 'Output Disable for CLK4.'),
-                                          Element(name = 'CLK3_OEB', idx_lowest_bit = 3, n_bits = 1, value = 0,
-                                                  description = 'Output Disable for CLK3.'),
-                                          Element(name = 'CLK2_OEB', idx_lowest_bit = 2, n_bits = 1, value = 0,
-                                                  description = 'Output Disable for CLK2.'),
-                                          Element(name = 'CLK1_OEB', idx_lowest_bit = 1, n_bits = 1, value = 0,
-                                                  description = 'Output Disable for CLK1.'),
-                                          Element(name = 'CLK0_OEB', idx_lowest_bit = 0, n_bits = 1, value = 0,
-                                                  description = 'Output Disable for CLK0.'),
-                                          ], default_value = 0))
-
-    registers.append(
-        Register(name = 'OEB_Pin_Enable_Control_Mask', address = 9, description = 'OEB_Pin_Enable_Control_Mask',
-                 elements = [Element(name = 'OEB_MAS_K7', idx_lowest_bit = 7, n_bits = 1, value = 0,
-                                     description = 'OEB pin enable control of CLK7.'),
-                             Element(name = 'OEB_MAS_K6', idx_lowest_bit = 6, n_bits = 1, value = 0,
-                                     description = 'OEB pin enable control of CLK6.'),
-                             Element(name = 'OEB_MAS_K5', idx_lowest_bit = 5, n_bits = 1, value = 0,
-                                     description = 'OEB pin enable control of CLK5.'),
-                             Element(name = 'OEB_MAS_K4', idx_lowest_bit = 4, n_bits = 1, value = 0,
-                                     description = 'OEB pin enable control of CLK4.'),
-                             Element(name = 'OEB_MAS_K3', idx_lowest_bit = 3, n_bits = 1, value = 0,
-                                     description = 'OEB pin enable control of CLK3.'),
-                             Element(name = 'OEB_MAS_K2', idx_lowest_bit = 2, n_bits = 1, value = 0,
-                                     description = 'OEB pin enable control of CLK2.'),
-                             Element(name = 'OEB_MAS_K1', idx_lowest_bit = 1, n_bits = 1, value = 0,
-                                     description = 'OEB pin enable control of CLK1.'),
-                             Element(name = 'OEB_MAS_K0', idx_lowest_bit = 0, n_bits = 1, value = 0,
-                                     description = 'OEB pin enable control of CLK0.'),
-                             ], default_value = 0))
-
-    registers.append(Register(name = 'PLL_Input_Source', address = 15, description = 'PLL_Input_Source',
-                              elements = [Element(name = 'CLKIN_DIV', idx_lowest_bit = 6, n_bits = 2, value = 0,
-                                                  description = 'ClKIN Input Divider.'),
-                                          Element(name = 'Reserved_4', idx_lowest_bit = 4, n_bits = 2, value = 0,
-                                                  read_only = True, description = 'Leave as default.'),
-                                          Element(name = 'PLLB_SRC', idx_lowest_bit = 3, n_bits = 1, value = 0,
-                                                  description = 'Input Source Select for PLLB.'),
-                                          Element(name = 'PLLA_SRC', idx_lowest_bit = 2, n_bits = 1, value = 0,
-                                                  description = 'Input Source Select for PLLA.'),
-                                          Element(name = 'Reserved_0', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                                  read_only = True, description = 'Leave as default.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'CLK0_Control', address = 16, description = 'CLK0_Control',
-                              elements = [Element(name = 'CLK0_PDN', idx_lowest_bit = 7, n_bits = 1, value = 0,
-                                                  description = 'Clock 0 Power Down.'),
-                                          Element(name = 'MS0_INT', idx_lowest_bit = 6, n_bits = 1, value = 0,
-                                                  description = 'MultiSynth 0 Integer Mode.'),
-                                          Element(name = 'MS0_SRC', idx_lowest_bit = 5, n_bits = 1, value = 0,
-                                                  description = 'MultiSynth Source Select for CLK0.'),
-                                          Element(name = 'CLK0_INV', idx_lowest_bit = 4, n_bits = 1, value = 0,
-                                                  description = 'Output Clock 0 Invert.'),
-                                          Element(name = 'CLK0_SRC', idx_lowest_bit = 2, n_bits = 2, value = 0,
-                                                  description = 'Output Clock 0 Input Source.'),
-                                          Element(name = 'CLK0_IDRV', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                                  description = 'CLK0 Output Rise and Fall time / Drive Strength Control.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'CLK1_Control', address = 17, description = 'CLK1_Control',
-                              elements = [Element(name = 'CLK1_PDN', idx_lowest_bit = 7, n_bits = 1, value = 0,
-                                                  description = 'Clock 1 Power Down.'),
-                                          Element(name = 'MS1_INT', idx_lowest_bit = 6, n_bits = 1, value = 0,
-                                                  description = 'MultiSynth 1 Integer Mode.'),
-                                          Element(name = 'MS1_SRC', idx_lowest_bit = 5, n_bits = 1, value = 0,
-                                                  description = 'MultiSynth Source Select for CLK1.'),
-                                          Element(name = 'CLK1_INV', idx_lowest_bit = 4, n_bits = 1, value = 0,
-                                                  description = 'Output Clock 1 Invert.'),
-                                          Element(name = 'CLK1_SRC', idx_lowest_bit = 2, n_bits = 2, value = 0,
-                                                  description = 'Output Clock 1 Input Source.'),
-                                          Element(name = 'CLK1_IDRV', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                                  description = 'CLK1 Output Rise and Fall time / Drive Strength Control.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'CLK2_Control', address = 18, description = 'CLK2_Control',
-                              elements = [Element(name = 'CLK2_PDN', idx_lowest_bit = 7, n_bits = 1, value = 0,
-                                                  description = 'Clock 2 Power Down.'),
-                                          Element(name = 'MS2_INT', idx_lowest_bit = 6, n_bits = 1, value = 0,
-                                                  description = 'MultiSynth 2 Integer Mode.'),
-                                          Element(name = 'MS2_SRC', idx_lowest_bit = 5, n_bits = 1, value = 0,
-                                                  description = 'MultiSynth Source Select for CLK2.'),
-                                          Element(name = 'CLK2_INV', idx_lowest_bit = 4, n_bits = 1, value = 0,
-                                                  description = 'Output Clock 2 Invert.'),
-                                          Element(name = 'CLK2_SRC', idx_lowest_bit = 2, n_bits = 2, value = 0,
-                                                  description = 'Output Clock 2 Input Source.'),
-                                          Element(name = 'CLK2_IDRV', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                                  description = 'CLK2 Output Rise and Fall time / Drive Strength Control.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'CLK3_Control', address = 19, description = 'CLK3_Control',
-                              elements = [Element(name = 'CLK3_PDN', idx_lowest_bit = 7, n_bits = 1, value = 0,
-                                                  description = 'Clock 3 Power Down.'),
-                                          Element(name = 'MS3_INT', idx_lowest_bit = 6, n_bits = 1, value = 0,
-                                                  description = 'MultiSynth 3 Integer Mode.'),
-                                          Element(name = 'MS3_SRC', idx_lowest_bit = 5, n_bits = 1, value = 0,
-                                                  description = 'MultiSynth Source Select for CLK3.'),
-                                          Element(name = 'CLK3_INV', idx_lowest_bit = 4, n_bits = 1, value = 0,
-                                                  description = 'Output Clock 3 Invert.'),
-                                          Element(name = 'CLK3_SRC', idx_lowest_bit = 2, n_bits = 2, value = 0,
-                                                  description = 'Output Clock 3 Input Source.'),
-                                          Element(name = 'CLK3_IDRV', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                                  description = 'CLK3 Output Rise and Fall time / Drive Strength Control.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'CLK4_Control', address = 20, description = 'CLK4_Control',
-                              elements = [Element(name = 'CLK4_PDN', idx_lowest_bit = 7, n_bits = 1, value = 0,
-                                                  description = 'Clock 4 Power Down.'),
-                                          Element(name = 'MS4_INT', idx_lowest_bit = 6, n_bits = 1, value = 0,
-                                                  description = 'MultiSynth 4 Integer Mode.'),
-                                          Element(name = 'MS4_SRC', idx_lowest_bit = 5, n_bits = 1, value = 0,
-                                                  description = 'MultiSynth Source Select for CLK4.'),
-                                          Element(name = 'CLK4_INV', idx_lowest_bit = 4, n_bits = 1, value = 0,
-                                                  description = 'Output Clock 4 Invert.'),
-                                          Element(name = 'CLK4_SRC', idx_lowest_bit = 2, n_bits = 2, value = 0,
-                                                  description = 'Output Clock 4 Input Source.'),
-                                          Element(name = 'CLK4_IDRV', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                                  description = 'CLK4 Output Rise and Fall time / Drive Strength Control.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'CLK5_Control', address = 21, description = 'CLK5_Control',
-                              elements = [Element(name = 'CLK5_PDN', idx_lowest_bit = 7, n_bits = 1, value = 0,
-                                                  description = 'Clock 5 Power Down.'),
-                                          Element(name = 'MS5_INT', idx_lowest_bit = 6, n_bits = 1, value = 0,
-                                                  description = 'MultiSynth 5 Integer Mode.'),
-                                          Element(name = 'MS5_SRC', idx_lowest_bit = 5, n_bits = 1, value = 0,
-                                                  description = 'MultiSynth Source Select for CLK5.'),
-                                          Element(name = 'CLK5_INV', idx_lowest_bit = 4, n_bits = 1, value = 0,
-                                                  description = 'Output Clock 5 Invert.'),
-                                          Element(name = 'CLK5_SRC', idx_lowest_bit = 2, n_bits = 2, value = 0,
-                                                  description = 'Output Clock 5 Input Source.'),
-                                          Element(name = 'CLK5_IDRV', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                                  description = 'CLK5 Output Rise and Fall time / Drive Strength Control.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'CLK6_Control', address = 22, description = 'CLK6_Control',
-                              elements = [Element(name = 'CLK6_PDN', idx_lowest_bit = 7, n_bits = 1, value = 0,
-                                                  description = 'Clock 7 Power Down.'),
-                                          Element(name = 'FBA_INT', idx_lowest_bit = 6, n_bits = 1, value = 0,
-                                                  description = 'FBA MultiSynth Integer Mode.'),
-                                          Element(name = 'MS6_SRC', idx_lowest_bit = 5, n_bits = 1, value = 0,
-                                                  description = 'MultiSynth Source Select for CLK6.'),
-                                          Element(name = 'CLK6_INV', idx_lowest_bit = 4, n_bits = 1, value = 0,
-                                                  description = 'Output Clock 6 Invert.'),
-                                          Element(name = 'CLK6_SRC', idx_lowest_bit = 2, n_bits = 2, value = 0,
-                                                  description = 'Output Clock 6 Input Source.'),
-                                          Element(name = 'CLK6_IDRV', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                                  description = 'CLK6 Output Rise and Fall time / Drive Strength Control.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'CLK7_Control', address = 23, description = 'CLK7_Control',
-                              elements = [Element(name = 'CLK7_PDN', idx_lowest_bit = 7, n_bits = 1, value = 0,
-                                                  description = 'Clock 7 Power Down.'),
-                                          Element(name = 'FBB_INT', idx_lowest_bit = 6, n_bits = 1, value = 0,
-                                                  description = 'FBB MultiSynth Integer Mode.'),
-                                          Element(name = 'MS7_SRC', idx_lowest_bit = 5, n_bits = 1, value = 0,
-                                                  description = 'MultiSynth Source Select for CLK7.'),
-                                          Element(name = 'CLK7_INV', idx_lowest_bit = 4, n_bits = 1, value = 0,
-                                                  description = 'Output Clock 7 Invert.'),
-                                          Element(name = 'CLK7_SRC', idx_lowest_bit = 2, n_bits = 2, value = 0,
-                                                  description = 'Output Clock 7 Input Source.'),
-                                          Element(name = 'CLK7_IDRV', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                                  description = 'CLK7 Output Rise and Fall time / Drive Strength Control.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'CLK3_0_Disable_State', address = 24, description = 'CLK3_0_Disable_State',
-                              elements = [Element(name = 'CLK3_DIS_STATE', idx_lowest_bit = 6, n_bits = 2, value = 0,
-                                                  description = 'Clock 3 Disable State.'),
-                                          Element(name = 'CLK2_DIS_STATE', idx_lowest_bit = 4, n_bits = 2, value = 0,
-                                                  description = 'Clock 2 Disable State.'),
-                                          Element(name = 'CLK1_DIS_STATE', idx_lowest_bit = 2, n_bits = 2, value = 0,
-                                                  description = 'Clock 1 Disable State.'),
-                                          Element(name = 'CLK0_DIS_STATE', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                                  description = 'Clock 0 Disable State.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'CLK7_4_Disable_State', address = 25, description = 'CLK7_4_Disable_State',
-                              elements = [Element(name = 'CLK7_DIS_STATE', idx_lowest_bit = 6, n_bits = 2, value = 0,
-                                                  description = 'Clock 7 Disable State.'),
-                                          Element(name = 'CLK6_DIS_STATE', idx_lowest_bit = 4, n_bits = 2, value = 0,
-                                                  description = 'Clock 6 Disable State.'),
-                                          Element(name = 'CLK5_DIS_STATE', idx_lowest_bit = 2, n_bits = 2, value = 0,
-                                                  description = 'Clock 5 Disable State.'),
-                                          Element(name = 'CLK4_DIS_STATE', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                                  description = 'Clock 4 Disable State.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth_NA_Parameters', address = 26, description = 'Multisynth_NA_Parameters',
-                              elements = [Element(name = 'MSNA_P3_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth NA Parameter 3.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth_NA_Parameters', address = 27, description = 'Multisynth_NA_Parameters',
-                              elements = [Element(name = 'MSNA_P3_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth NA Parameter 3.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth_NA_Parameters', address = 28, description = 'Multisynth_NA_Parameters',
-                              elements = [Element(name = 'Unused', idx_lowest_bit = 4, n_bits = 4, value = 0,
-                                                  description = 'Unused.'),
-                                          Element(name = 'Reserved_2', idx_lowest_bit = 2, n_bits = 2, value = 0,
-                                                  read_only = True, description = 'Reserved.'),
-                                          Element(name = 'MSNA_P1_17_16', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                                  description = 'Multisynth NA Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth_NA_Parameters', address = 29, description = 'Multisynth_NA_Parameters',
-                              elements = [Element(name = 'MSNA_P1_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth NA Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth_NA_Parameters', address = 30, description = 'Multisynth_NA_Parameters',
-                              elements = [Element(name = 'MSNA_P1_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth NA Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth_NA_Parameters', address = 31, description = 'Multisynth_NA_Parameters',
-                              elements = [Element(name = 'MSNA_P3_19_16', idx_lowest_bit = 4, n_bits = 4, value = 0,
-                                                  description = 'Multisynth NA Parameter 3.'),
-                                          Element(name = 'MSNA_P2_19_16', idx_lowest_bit = 0, n_bits = 4, value = 0,
-                                                  description = 'Multisynth NA Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth_NA_Parameters', address = 32, description = 'Multisynth_NA_Parameters',
-                              elements = [Element(name = 'MSNA_P2_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth NA Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth_NA_Parameters', address = 33, description = 'Multisynth_NA_Parameters',
-                              elements = [Element(name = 'MSNA_P2_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth NA Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth_NB_Parameters', address = 34, description = 'Multisynth_NB_Parameters',
-                              elements = [Element(name = 'MSNB_P3_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth NA Parameter 3.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth_NB_Parameters', address = 35, description = 'Multisynth_NB_Parameters',
-                              elements = [Element(name = 'MSNB_P3_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth NB Parameter 3.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth_NB_Parameters', address = 36, description = 'Multisynth_NB_Parameters',
-                              elements = [
-                                  Element(name = 'Unused', idx_lowest_bit = 4, n_bits = 4, value = 0, description = ''),
-                                  Element(name = 'Reserved_2', idx_lowest_bit = 2, n_bits = 2, value = 0,
-                                          read_only = True, description = 'Reserved.'),
-                                  Element(name = 'MSNB_P1_17_16', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                          description = 'Multisynth NB Parameter 1.'),
-                                  ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth_NB_Parameters', address = 37, description = 'Multisynth_NB_Parameters',
-                              elements = [Element(name = 'MSNB_P1_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth NB Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth_NB_Parameters', address = 38, description = 'Multisynth_NB_Parameters',
-                              elements = [Element(name = 'MSNB_P1_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth NB Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth_NB_Parameters', address = 39, description = 'Multisynth_NB_Parameters',
-                              elements = [Element(name = 'MSNB_P3_19_16', idx_lowest_bit = 4, n_bits = 4, value = 0,
-                                                  description = 'Multisynth NB Parameter 3.'),
-                                          Element(name = 'MSNB_P2_19_16', idx_lowest_bit = 0, n_bits = 4, value = 0,
-                                                  description = 'Multisynth NB Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth_NB_Parameters', address = 40, description = 'Multisynth_NB_Parameters',
-                              elements = [Element(name = 'MSNB_P2_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth NB Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth_NB_Parameters', address = 41, description = 'Multisynth_NB_Parameters',
-                              elements = [Element(name = 'MSNB_P2_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth NB Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth0_Parameters', address = 42, description = 'Multisynth0_Parameters',
-                              elements = [Element(name = 'MS0_P3_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth0 Parameter 3.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth0_Parameters', address = 43, description = 'Multisynth0_Parameters',
-                              elements = [Element(name = 'MS0_P3_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth0 Parameter 3.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth0_Parameters', address = 44, description = 'Multisynth0_Parameters',
-                              elements = [
-                                  Element(name = 'Unused', idx_lowest_bit = 7, n_bits = 1, value = 0, description = ''),
-                                  Element(name = 'R0_DIV', idx_lowest_bit = 4, n_bits = 3, value = 0,
-                                          description = 'R0 Output Divider. 000b: Divide by 1 001b: Divide by 2'),
-                                  Element(name = 'MS0_DIVBY4', idx_lowest_bit = 2, n_bits = 2, value = 0,
-                                          description = 'MS0 Divide by 4 Enable.'),
-                                  Element(name = 'MS0_P1_17_16', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                          description = 'Multisynth0 Parameter 1.'),
-                                  ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth0_Parameters', address = 45, description = 'Multisynth0_Parameters',
-                              elements = [Element(name = 'MS0_P1_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth0 Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth0_Parameters', address = 46, description = 'Multisynth0_Parameters',
-                              elements = [Element(name = 'MS0_P1_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth0 Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth0_Parameters', address = 47, description = 'Multisynth0_Parameters',
-                              elements = [Element(name = 'MS0_P3_19_16', idx_lowest_bit = 4, n_bits = 4, value = 0,
-                                                  description = 'Multisynth0 Parameter 3.'),
-                                          Element(name = 'MS0_P2_19_16', idx_lowest_bit = 0, n_bits = 4, value = 0,
-                                                  description = 'Multisynth0 Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth0_Parameters', address = 48, description = 'Multisynth0_Parameters',
-                              elements = [Element(name = 'MS0_P2_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth0 Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth0_Parameters', address = 49, description = 'Multisynth0_Parameters',
-                              elements = [Element(name = 'MS0_P2_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth0 Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth1_Parameters', address = 50, description = 'Multisynth1_Parameters',
-                              elements = [Element(name = 'MS1_P3_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth1 Parameter 3.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth1_Parameters', address = 51, description = 'Multisynth1_Parameters',
-                              elements = [Element(name = 'MS1_P3_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth1 Parameter 3.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth1_Parameters', address = 52, description = 'Multisynth1_Parameters',
-                              elements = [
-                                  Element(name = 'Unused', idx_lowest_bit = 7, n_bits = 1, value = 0, description = ''),
-                                  Element(name = 'R1_DIV', idx_lowest_bit = 4, n_bits = 3, value = 0,
-                                          description = 'R1 Output Divider. 000b: Divide by 1 001b: Divide by 2'),
-                                  Element(name = 'MS1_DIVBY4', idx_lowest_bit = 2, n_bits = 2, value = 0,
-                                          description = 'MS1 Divide by 4 Enable.'),
-                                  Element(name = 'MS1_P1_17_16', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                          description = 'Multisynth1 Parameter 1.'),
-                                  ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth1_Parameters', address = 53, description = 'Multisynth1_Parameters',
-                              elements = [Element(name = 'MS1_P1_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth1 Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth1_Parameters', address = 54, description = 'Multisynth1_Parameters',
-                              elements = [Element(name = 'MS1_P1_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth1 Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth1_Parameters', address = 55, description = 'Multisynth1_Parameters',
-                              elements = [Element(name = 'MS1_P3_19_16', idx_lowest_bit = 4, n_bits = 4, value = 0,
-                                                  description = 'Multisynth1 Parameter 3.'),
-                                          Element(name = 'MS1_P2_19_16', idx_lowest_bit = 0, n_bits = 4, value = 0,
-                                                  description = 'Multisynth1 Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth1_Parameters', address = 56, description = 'Multisynth1_Parameters',
-                              elements = [Element(name = 'MS1_P2_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth1 Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth1_Parameters', address = 57, description = 'Multisynth1_Parameters',
-                              elements = [Element(name = 'MS1_P2_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth1 Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth2_Parameters', address = 58, description = 'Multisynth2_Parameters',
-                              elements = [Element(name = 'MS2_P3_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth2 Parameter 3.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth2_Parameters', address = 59, description = 'Multisynth2_Parameters',
-                              elements = [Element(name = 'MS2_P3_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth2 Parameter 3.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth2_Parameters', address = 60, description = 'Multisynth2_Parameters',
-                              elements = [
-                                  Element(name = 'Unused', idx_lowest_bit = 7, n_bits = 1, value = 0, description = ''),
-                                  Element(name = 'R2_DIV', idx_lowest_bit = 4, n_bits = 3, value = 0,
-                                          description = 'R2 Output Divider. 000b: Divide by 1 001b: Divide by 2'),
-                                  Element(name = 'MS2_DIVBY4', idx_lowest_bit = 2, n_bits = 2, value = 0,
-                                          description = 'MS2 Divide by 4 Enable.'),
-                                  Element(name = 'MS2_P1_17_16', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                          description = 'Multisynth2 Parameter 1.'),
-                                  ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth2_Parameters', address = 61, description = 'Multisynth2_Parameters',
-                              elements = [Element(name = 'MS2_P1_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth2 Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth2_Parameters', address = 62, description = 'Multisynth2_Parameters',
-                              elements = [Element(name = 'MS2_P1_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth2 Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth2_Parameters', address = 63, description = 'Multisynth2_Parameters',
-                              elements = [Element(name = 'MS2_P3_19_16', idx_lowest_bit = 4, n_bits = 4, value = 0,
-                                                  description = 'Multisynth2 Parameter 3.'),
-                                          Element(name = 'MS2_P2_19_16', idx_lowest_bit = 0, n_bits = 4, value = 0,
-                                                  description = 'Multisynth2 Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth2_Parameters', address = 64, description = 'Multisynth2_Parameters',
-                              elements = [Element(name = 'MS2_P2_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth2 Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth2_Parameters', address = 65, description = 'Multisynth2_Parameters',
-                              elements = [Element(name = 'MS2_P2_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth2 Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth3_Parameters', address = 66, description = 'Multisynth3_Parameters',
-                              elements = [Element(name = 'MS3_P3_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth3 Parameter 3.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth3_Parameters', address = 67, description = 'Multisynth3_Parameters',
-                              elements = [Element(name = 'MS3_P3_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth3 Parameter 3.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth3_Parameters', address = 68, description = 'Multisynth3_Parameters',
-                              elements = [
-                                  Element(name = 'Unused', idx_lowest_bit = 7, n_bits = 1, value = 0, description = ''),
-                                  Element(name = 'R3_DIV', idx_lowest_bit = 4, n_bits = 3, value = 0,
-                                          description = 'R3 Output Divider. 000b: Divide by 1 001b: Divide by 2'),
-                                  Element(name = 'MS3_DIVBY4', idx_lowest_bit = 2, n_bits = 2, value = 0,
-                                          description = 'MS3 Divide by 4 Enable.'),
-                                  Element(name = 'MS3_P1_17_16', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                          description = 'Multisynth3 Parameter 1.'),
-                                  ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth3_Parameters', address = 69, description = 'Multisynth3_Parameters',
-                              elements = [Element(name = 'MS3_P1_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth3 Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth3_Parameters', address = 70, description = 'Multisynth3_Parameters',
-                              elements = [Element(name = 'MS3_P1_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth3 Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth3_Parameters', address = 71, description = 'Multisynth3_Parameters',
-                              elements = [Element(name = 'MS3_P3_19_16', idx_lowest_bit = 4, n_bits = 4, value = 0,
-                                                  description = 'Multisynth3 Parameter 3.'),
-                                          Element(name = 'MS3_P2_19_16', idx_lowest_bit = 0, n_bits = 4, value = 0,
-                                                  description = 'Multisynth3 Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth3_Parameters', address = 72, description = 'Multisynth3_Parameters',
-                              elements = [Element(name = 'MS3_P2_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth3 Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth3_Parameters', address = 73, description = 'Multisynth3_Parameters',
-                              elements = [Element(name = 'MS3_P2_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth3 Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth4_Parameters', address = 74, description = 'Multisynth4_Parameters',
-                              elements = [Element(name = 'MS4_P3_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth4 Parameter 3.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth4_Parameters', address = 75, description = 'Multisynth4_Parameters',
-                              elements = [Element(name = 'MS4_P3_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth4 Parameter 3.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth4_Parameters', address = 76, description = 'Multisynth4_Parameters',
-                              elements = [
-                                  Element(name = 'Unused', idx_lowest_bit = 7, n_bits = 1, value = 0, description = ''),
-                                  Element(name = 'R4_DIV', idx_lowest_bit = 4, n_bits = 3, value = 0,
-                                          description = 'R4 Output Divider. 000b: Divide by 1 001b: Divide by 2'),
-                                  Element(name = 'MS4_DIVBY4', idx_lowest_bit = 2, n_bits = 2, value = 0,
-                                          description = 'MS4 Divide by 4 Enable.'),
-                                  Element(name = 'MS4_P1_17_16', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                          description = 'Multisynth4 Parameter 1.'),
-                                  ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth4_Parameters', address = 77, description = 'Multisynth4_Parameters',
-                              elements = [Element(name = 'MS4_P1_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth4 Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth4_Parameters', address = 78, description = 'Multisynth4_Parameters',
-                              elements = [Element(name = 'MS4_P1_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth4 Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth4_Parameters', address = 79, description = 'Multisynth4_Parameters',
-                              elements = [Element(name = 'MS4_P3_19_16', idx_lowest_bit = 4, n_bits = 4, value = 0,
-                                                  description = 'Multisynth4 Parameter 3.'),
-                                          Element(name = 'MS4_P2_19_16', idx_lowest_bit = 0, n_bits = 4, value = 0,
-                                                  description = 'Multisynth4 Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth4_Parameters', address = 80, description = 'Multisynth4_Parameters',
-                              elements = [Element(name = 'MS4_P2_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth4 Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth4_Parameters', address = 81, description = 'Multisynth4_Parameters',
-                              elements = [Element(name = 'MS4_P2_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth4 Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth5_Parameters', address = 82, description = 'Multisynth5_Parameters',
-                              elements = [Element(name = 'MS5_P3_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth5 Parameter 3.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth5_Parameters', address = 83, description = 'Multisynth5_Parameters',
-                              elements = [Element(name = 'MS5_P3_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth5 Parameter 3.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth5_Parameters', address = 84, description = 'Multisynth5_Parameters',
-                              elements = [
-                                  Element(name = 'Unused', idx_lowest_bit = 7, n_bits = 1, value = 0, description = ''),
-                                  Element(name = 'R5_DIV', idx_lowest_bit = 4, n_bits = 3, value = 0,
-                                          description = 'R5 Output Divider. 000b: Divide by 1 001b: Divide by 2'),
-                                  Element(name = 'MS5_DIVBY4', idx_lowest_bit = 2, n_bits = 2, value = 0,
-                                          description = 'MS5 Divide by 4 Enable.'),
-                                  Element(name = 'MS5_P1_17_16', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                          description = 'Multisynth5 Parameter 1.'),
-                                  ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth5_Parameters', address = 85, description = 'Multisynth5_Parameters',
-                              elements = [Element(name = 'MS5_P1_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth5 Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth5_Parameters', address = 86, description = 'Multisynth5_Parameters',
-                              elements = [Element(name = 'MS5_P1_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth5 Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth5_Parameters', address = 87, description = 'Multisynth5_Parameters',
-                              elements = [Element(name = 'MS5_P3_19_16', idx_lowest_bit = 4, n_bits = 4, value = 0,
-                                                  description = 'Multisynth5 Parameter 3.'),
-                                          Element(name = 'MS5_P2_19_16', idx_lowest_bit = 0, n_bits = 4, value = 0,
-                                                  description = 'Multisynth5 Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth5_Parameters', address = 88, description = 'Multisynth5_Parameters',
-                              elements = [Element(name = 'MS5_P2_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth5 Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth5_Parameters', address = 89, description = 'Multisynth5_Parameters',
-                              elements = [Element(name = 'MS5_P2_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth5 Parameter 2.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth6_Parameters', address = 90, description = 'Multisynth6_Parameters',
-                              elements = [Element(name = 'MS6_P1_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth6 Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Multisynth7_Parameters', address = 91, description = 'Multisynth7_Parameters',
-                              elements = [Element(name = 'MS7_P1_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'Multisynth7 Parameter 1.'),
-                                          ], default_value = 0))
-
-    registers.append(
-        Register(name = 'Clock_6_and_7_Output_Divider', address = 92, description = 'Clock_6_and_7_Output_Divider',
-                 elements = [Element(name = 'Reserved_7', idx_lowest_bit = 7, n_bits = 1, value = 0, read_only = True,
-                                     description = 'Leave as default.'),
-                             Element(name = 'R7_DIV', idx_lowest_bit = 4, n_bits = 3, value = 0,
-                                     description = 'R7 Output Divider. 000b: Divide by 1 001b: Divide by 2'),
-                             Element(name = 'Reserved_3', idx_lowest_bit = 3, n_bits = 1, value = 0, read_only = True,
-                                     description = 'Leave as default.'),
-                             Element(name = 'R6_DIV', idx_lowest_bit = 0, n_bits = 2, value = 0,
-                                     description = 'R6 Output Divider. 000b: Divide by 1 001b: Divide by 2'),
-                             ], default_value = 0))
-
-    registers.append(
-        Register(name = 'Spread_Spectrum_Parameters', address = 149, description = 'Spread_Spectrum_Parameters',
-                 elements = [Element(name = 'SSC_EN', idx_lowest_bit = 7, n_bits = 1, value = 0,
-                                     description = 'Spread Spectrum Enable'),
-                             Element(name = 'SSDN_P2_14_8', idx_lowest_bit = 0, n_bits = 7, value = 0,
-                                     description = 'PLL A Spread Spectrum Down Parameter 2.'),
-                             ], default_value = 0))
-
-    registers.append(
-        Register(name = 'Spread_Spectrum_Parameters', address = 150, description = 'Spread_Spectrum_Parameters',
-                 elements = [Element(name = 'SSDN_P2_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                     description = 'PLL A Spread Spectrum Down Parameter 2.'),
-                             ], default_value = 0))
-
-    registers.append(
-        Register(name = 'Spread_Spectrum_Parameters', address = 151, description = 'Spread_Spectrum_Parameters',
-                 elements = [Element(name = 'SSC_MODE', idx_lowest_bit = 7, n_bits = 1, value = 0,
-                                     description = 'Spread Spectrum Mode.'),
-                             Element(name = 'SSDN_P3_14_8', idx_lowest_bit = 0, n_bits = 7, value = 0,
-                                     description = 'PLL A Spread Spectrum Down Parameter 3.'),
-                             ], default_value = 0))
-
-    registers.append(
-        Register(name = 'Spread_Spectrum_Parameters', address = 152, description = 'Spread_Spectrum_Parameters',
-                 elements = [Element(name = 'SSDN_P3_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                     description = 'PLL A Spread Spectrum Down Parameter 3.'),
-                             ], default_value = 0))
-
-    registers.append(
-        Register(name = 'Spread_Spectrum_Parameters', address = 153, description = 'Spread_Spectrum_Parameters',
-                 elements = [Element(name = 'SSDN_P1_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                     description = 'PLL A Spread Spectrum Down Parameter 1.'),
-                             ], default_value = 0))
-
-    registers.append(
-        Register(name = 'Spread_Spectrum_Parameters', address = 154, description = 'Spread_Spectrum_Parameters',
-                 elements = [Element(name = 'SSUDP_11_8', idx_lowest_bit = 4, n_bits = 4, value = 0,
-                                     description = 'PLL A Spread Spectrum Up/Down Parameter.'),
-                             Element(name = 'SSDN_P1_11_8', idx_lowest_bit = 0, n_bits = 4, value = 0,
-                                     description = 'PLL A Spread Spectrum Down Parameter 1.'),
-                             ], default_value = 0))
-
-    registers.append(
-        Register(name = 'Spread_Spectrum_Parameters', address = 155, description = 'Spread_Spectrum_Parameters',
-                 elements = [Element(name = 'SSUDP_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                     description = 'PLL A Spread Spectrum Up/Down Parameter.'),
-                             ], default_value = 0))
-
-    registers.append(
-        Register(name = 'Spread_Spectrum_Parameters', address = 156, description = 'Spread_Spectrum_Parameters',
-                 elements = [
-                     Element(name = 'Unused', idx_lowest_bit = 7, n_bits = 1, value = 0, description = 'Unused.'),
-                     Element(name = 'SSUP_P2_14_8', idx_lowest_bit = 0, n_bits = 7, value = 0,
-                             description = 'PLL A Spread Spectrum Up Parameter 2.'),
-                     ], default_value = 0))
-
-    registers.append(
-        Register(name = 'Spread_Spectrum_Parameters', address = 157, description = 'Spread_Spectrum_Parameters',
-                 elements = [Element(name = 'SSUP_P2_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                     description = 'PLL A Spread Spectrum Up Parameter 2.'),
-                             ], default_value = 0))
-
-    registers.append(
-        Register(name = 'Spread_Spectrum_Parameters', address = 158, description = 'Spread_Spectrum_Parameters',
-                 elements = [
-                     Element(name = 'Unused', idx_lowest_bit = 7, n_bits = 1, value = 0, description = 'Unused.'),
-                     Element(name = 'SSUP_P3_14_8', idx_lowest_bit = 0, n_bits = 7, value = 0,
-                             description = 'PLL A Spread Spectrum Up Parameter 3.'),
-                     ], default_value = 0))
-
-    registers.append(
-        Register(name = 'Spread_Spectrum_Parameters', address = 159, description = 'Spread_Spectrum_Parameters',
-                 elements = [Element(name = 'SSUP_P3_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                     description = 'PLL A Spread Spectrum Up Parameter 3.'),
-                             ], default_value = 0))
-
-    registers.append(
-        Register(name = 'Spread_Spectrum_Parameters', address = 160, description = 'Spread_Spectrum_Parameters',
-                 elements = [Element(name = 'SSUP_P1_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                     description = 'PLL A Spread Spectrum Up Parameter 1.'),
-                             ], default_value = 0))
-
-    registers.append(
-        Register(name = 'Spread_Spectrum_Parameters', address = 161, description = 'Spread_Spectrum_Parameters',
-                 elements = [Element(name = 'SS_NCLK', idx_lowest_bit = 4, n_bits = 4, value = 0,
-                                     description = 'Must write 0000b to these bits.'),
-                             Element(name = 'SSUP_P1_11_8', idx_lowest_bit = 0, n_bits = 4, value = 0,
-                                     description = 'PLL A Spread Spectrum Up Parameter 1.'),
-                             ], default_value = 0))
-
-    registers.append(Register(name = 'VCXO_Parameter', address = 162, description = 'VCXO_Parameter',
-                              elements = [Element(name = 'VCXO_Param_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'VCXO Parameter.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'VCXO_Parameter', address = 163, description = 'VCXO_Parameter',
-                              elements = [Element(name = 'VCXO_Param_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0,
-                                                  description = 'VCXO Parameter.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'VCXO_Parameter', address = 164, description = 'VCXO_Parameter',
-                              elements = [Element(name = 'Reserved_6', idx_lowest_bit = 6, n_bits = 2, value = 0,
-                                                  read_only = True,
-                                                  description = 'Reserved. Only write 00b to these bits.'),
-                                          Element(name = 'VCXO_Param_21_16', idx_lowest_bit = 0, n_bits = 6, value = 0,
-                                                  description = 'VCXO Parameter.'),
-                                          ], default_value = 0))
-
-    registers.append(
-        Register(name = 'CLK0_Initial_Phase_Offset', address = 165, description = 'CLK0_Initial_Phase_Offset',
-                 elements = [Element(name = 'Reserved_7', idx_lowest_bit = 7, n_bits = 1, value = 0, read_only = True,
-                                     description = 'Only write 0 to this bit.'),
-                             Element(name = 'CLK0_PHOFF', idx_lowest_bit = 0, n_bits = 7, value = 0,
-                                     description = 'Clock 0 Initial Phase Offset.'),
-                             ], default_value = 0))
-
-    registers.append(
-        Register(name = 'CLK1_Initial_Phase_Offset', address = 166, description = 'CLK1_Initial_Phase_Offset',
-                 elements = [Element(name = 'Reserved_7', idx_lowest_bit = 7, n_bits = 1, value = 0, read_only = True,
-                                     description = 'Only write 0 to this bit.'),
-                             Element(name = 'CLK1_PHOFF', idx_lowest_bit = 0, n_bits = 7, value = 0,
-                                     description = 'Clock 1 Initial Phase Offset.'),
-                             ], default_value = 0))
-
-    registers.append(
-        Register(name = 'CLK2_Initial_Phase_Offset', address = 167, description = 'CLK2_Initial_Phase_Offset',
-                 elements = [Element(name = 'Reserved_7', idx_lowest_bit = 7, n_bits = 1, value = 0, read_only = True,
-                                     description = 'Only write 0 to this bit.'),
-                             Element(name = 'CLK2_PHOFF', idx_lowest_bit = 0, n_bits = 7, value = 0,
-                                     description = 'Clock 2 Initial Phase Offset.'),
-                             ], default_value = 0))
-
-    registers.append(
-        Register(name = 'CLK3_Initial_Phase_Offset', address = 168, description = 'CLK3_Initial_Phase_Offset',
-                 elements = [Element(name = 'Reserved_7', idx_lowest_bit = 7, n_bits = 1, value = 0, read_only = True,
-                                     description = 'Only write 0 to this bit.'),
-                             Element(name = 'CLK3_PHOFF', idx_lowest_bit = 0, n_bits = 7, value = 0,
-                                     description = 'Clock 3 Initial Phase Offset.'),
-                             ], default_value = 0))
-
-    registers.append(
-        Register(name = 'CLK4_Initial_Phase_Offset', address = 169, description = 'CLK4_Initial_Phase_Offset',
-                 elements = [Element(name = 'Reserved_7', idx_lowest_bit = 7, n_bits = 1, value = 0, read_only = True,
-                                     description = 'Only write 0 to this bit.'),
-                             Element(name = 'CLK4_PHOFF', idx_lowest_bit = 0, n_bits = 7, value = 0,
-                                     description = 'Clock 4 Initial Phase Offset.'),
-                             ], default_value = 0))
-
-    registers.append(
-        Register(name = 'CLK5_Initial_Phase_Offset', address = 170, description = 'CLK5_Initial_Phase_Offset',
-                 elements = [Element(name = 'Reserved_7', idx_lowest_bit = 7, n_bits = 1, value = 0, read_only = True,
-                                     description = 'Only write 0 to this bit.'),
-                             Element(name = 'CLK5_PHOFF', idx_lowest_bit = 0, n_bits = 7, value = 0,
-                                     description = 'Clock 5 Initial Phase Offset.'),
-                             ], default_value = 0))
-
-    registers.append(Register(name = 'PLL_Reset', address = 177, description = 'PLL_Reset',
-                              elements = [Element(name = 'PLLB_RST', idx_lowest_bit = 7, n_bits = 1, value = 0,
-                                                  description = 'PLLB_Reset.'),
-                                          Element(name = 'Reserved_6', idx_lowest_bit = 6, n_bits = 1, value = 0,
-                                                  read_only = True, description = 'Leave as default.'),
-                                          Element(name = 'PLLA_RST', idx_lowest_bit = 5, n_bits = 1, value = 0,
-                                                  description = 'PLLA_Reset.'),
-                                          Element(name = 'Reserved_0', idx_lowest_bit = 0, n_bits = 5, value = 0,
-                                                  read_only = True, description = 'Leave as default.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Crystal_Internal_Load_Capacitance', address = 183,
-                              description = 'Crystal_Internal_Load_Capacitance',
-                              elements = [Element(name = 'XTAL_CL', idx_lowest_bit = 6, n_bits = 2, value = 0,
-                                                  description = 'Crystal Load Capacitance Selection.'),
-                                          Element(name = 'Reserved_0', idx_lowest_bit = 0, n_bits = 6, value = 0,
-                                                  read_only = True,
-                                                  description = 'Bits 5:0 should be written to 010010b.'),
-                                          ], default_value = 0))
-
-    registers.append(Register(name = 'Fanout_Enable', address = 187, description = 'Fanout_Enable',
-                              elements = [Element(name = 'CLKIN_FANOUT_EN', idx_lowest_bit = 7, n_bits = 1, value = 0,
-                                                  description = 'Enable fanout of CLKIN to clock output multiplexers. Set this bit to 1b.'),
-                                          Element(name = 'XO_FANOUT_EN', idx_lowest_bit = 6, n_bits = 1, value = 0,
-                                                  description = 'Enable fanout of XO to clock output multiplexers. Set this bit to 1b.'),
-                                          Element(name = 'Reserved_5', idx_lowest_bit = 5, n_bits = 1, value = 0,
-                                                  read_only = True, description = 'Reserved.'),
-                                          Element(name = 'MS_FANOUT_EN', idx_lowest_bit = 4, n_bits = 1, value = 0,
-                                                  description = 'Enable fanout of Multisynth0 and Multisynth4 to all output multiplexers. Set this bit to 1b.'),
-                                          ], default_value = 0))
-
-    return registers
-
-
-
-def _get_registers_map():
-    raw_registers = _get_all_raw_registers()
-
-    names = [reg.name for reg in raw_registers]
-    duplicated_names = list((n for n in set(names) if names.count(n) > 1))
-
-    for reg in raw_registers:
-        if reg.name in duplicated_names:
-            reg.name = '{}_{}'.format(reg.name, reg.address)
-
-    regs_map = RegistersMap(name = 'Si5351', description = 'Si5351 registers.', registers = raw_registers)
-
-    reg = regs_map.registers['Crystal_Internal_Load_Capacitance']
-    reg.default_value = 0xC0
-    reg.reset()
-
-    element = regs_map.elements['SS_NCLK']['element']
-    element.value = 0
-    element.read_only = True
-
-    return regs_map
-
-
-
 class Si535x(Device):
+    I2C_ADDRESS = 0x60
+    FREQ_MCLK = int(25e6)
     N_OUTPUT_CLOCKS = 8
+    N_USED_OUTPUT_CLOCKS = 3
     PLLs = ('A', 'B')
     N_PLLS = len(PLLs)
-    CLKIN_DIVIDERS = {1: 0x00, 2: 0x01, 4: 0x20, 8: 0x03}
-    FREQ_MCLK = int(25e6)
-    I2C_ADDRESS = 0x60
     DENOMINATOR_BITS = 20
-
+    POW_2_DENOMINATOR_BITS = 2 ** DENOMINATOR_BITS - 1
     READ_ONLY_REGISTERS = (0,)
-    CLOCK_SOURCEs = {'XTAL': 0x00, 'CLKIN': 0x01, 'MultiSynth': 0x3}
+    INTEGER_ONLY_MULTISYNTHES = (6, 7)
+
+    CLKIN_DIVIDERS = {1: 0x00, 2: 0x01, 4: 0x20, 8: 0x03}
+    CLOCK_SOURCEs = {'XTAL': 0x00, 'CLKIN': 0x01, 'Group_MultiSynth': 0x2, 'MultiSynth': 0x3}
     OUTPUT_STRENGTHs = {2: 0x00, 4: 0x01, 6: 0x02, 8: 0x03}
     CRYSTAL_INTERNAL_LOAD_CAPACITANCEs = {6: 0x01, 8: 0x02, 10: 0x03}
     DISABLE_STATEs = {'LOW': 0x00, 'HIGH': 0x01, 'HIGH_IMPEDANCE': 0x02, 'NEVER_DISABLED': 0x03}
     R_DIVIDERs = {1: 0, 2: 1, 4: 2, 8: 3, 16: 4, 32: 5, 64: 6, 128: 7}
-
-    # ['0', '1', '2', '3', '4', '5', '6', '7', 'NA', 'NB']
-    MULTISYNTH_NAMEs = list((str(i) for i in range(N_OUTPUT_CLOCKS))) + list(('N' + e for e in PLLs))
 
 
     class _Interrupts:
 
         def __init__(self, si):
             self._si = si
+            self.set_masks(0)
+            self.clear_stickys()
 
 
-        def set_interrupts_mask(self, mask = 0):
+        @property
+        def masks(self):
+            return self._si._read_register_by_name('Interrupt_Status_Mask')
+
+
+        def set_masks(self, mask = 0):
             self._si._write_register_by_name('Interrupt_Status_Mask', mask)
 
 
-        def set_interrupt_mask(self, interrupt_name, value = True):
+        def set_mask(self, interrupt_name, value = True):
+            valids = self._si.map.registers['Interrupt_Status_Mask'].elements.keys()
+            assert interrupt_name in valids, 'valid names: {}'.format(valids)
             self._si._write_element_by_name('{}_MASK'.format(interrupt_name.upper()), 1 if value else 0)
 
 
-        def read_interrupt_stickys(self):
+        @property
+        def stickys(self):
             return self._si._read_register_by_name('Interrupt_Status_Sticky')
 
 
-        def clear_interrupt_stickys(self):
+        def clear_stickys(self):
             self._si._write_register_by_name('Interrupt_Status_Sticky', 0)
 
 
-        def clear_interrupt_sticky(self, interrupt_name):
+        def clear_sticky(self, interrupt_name):
+            valids = self._si.map.registers['Interrupt_Status_Sticky'].elements.keys()
+            assert interrupt_name in valids, 'valid names: {}'.format(valids)
             self._si._write_element_by_name('{}_STKY'.format(interrupt_name.upper()), 0)
 
 
-    class _Crystal:
+    class _MultisynthBase:
+        DIVIDER_MIN = None
+        DIVIDER_MAX = None
 
-        def __init__(self, si):
+
+        def __init__(self, si, idx):
             self._si = si
+            self._idx = idx
+            self._name = str(idx)
+            self._divider = self.DIVIDER_MAX
+            self._source = None
+            # self.set_input_source()  # need implement
 
 
-        # crystal capacitance
-        def set_crystal_internal_load_capacitance(self, pF = 10):
+        @property
+        def source(self):
+            return self._source
+
+
+        def set_input_source(self, source):
+            self._source = source
+            self._frequency = math.floor(self.source.freq / self.divider)
+
+
+        @property
+        def freq(self):
+            return math.floor(self.source.freq / self.divider)
+
+
+        def set_frequency(self, freq):
+            d = self.source.freq / freq
+            a = int(d)
+            b = (d - a) * self._si.POW_2_DENOMINATOR_BITS
+            c = self._si.POW_2_DENOMINATOR_BITS
+            self._set_divider(a, b, c)
+            self._frequency = freq
+            return True
+
+
+        def restore_frequency(self, ):
+            self.set_frequency(self._frequency)
+
+
+        @property
+        def divider(self):
+            return self._divider
+
+
+        def _set_divider(self, a, b = 0, c = 1):
+            """
+             MS6 and MS7 are integer-only dividers. The valid range
+            of values for these dividers is all even integers between 6 and 254 inclusive.
+            For MS6 and MS7, set MSx_P1 directly (e.g., MSx_P1=divide value).
+            """
+            a, b, c, _is_even_integer = self._validate_abc(a, b, c)
+            self._divider = a + b / c
+
+            if _is_even_integer:
+                self._set_integer_mode(True)
+                p1 = a if self._idx in self._si.INTEGER_ONLY_MULTISYNTHES else 128 * a + math.floor(128 * b / c) - 512
+                p2 = 0
+                p3 = 1
+            else:
+                self._set_integer_mode(False)
+                p1 = 128 * a + math.floor(128 * b / c) - 512
+                p2 = 128 * b - c * math.floor(128 * b / c)
+                p3 = c
+
+            return self._set_parameters(p1, p2, p3)
+
+
+        def _set_integer_mode(self, value = True):
+            raise NotImplementedError()
+
+
+        def _set_parameters(self, p1, p2 = None, p3 = None):
+            params = (p1, p2, p3)
+
+            bits_8 = ((7, 0),)
+            bits_18 = ((17, 16), (15, 8), (7, 0))
+            bits_20 = ((19, 16), (15, 8), (7, 0))
+
+            bits_ranges = {1: bits_8, 2: [], 3: []} if self._idx in self._si.INTEGER_ONLY_MULTISYNTHES else \
+                {1: bits_18, 2: bits_20, 3: bits_20}
+
+            for i in range(len(params)):
+                param_idx = i + 1
+                for bits_range in bits_ranges[param_idx]:
+                    element_name = 'MS{}_P{}_{}_{}'.format(self._name, param_idx, bits_range[0], bits_range[1])
+                    mask = (2 ** (bits_range[0] - bits_range[1] + 1) - 1) << bits_range[1]
+                    value = (params[i] & mask) >> bits_range[1]
+                    self._si._write_element_by_name(element_name, value)
+
+            return True
+
+
+        def _validate_abc(self, a, b, c):
+            a = int(a)
+            b = int(b)
+            c = int(c)
+            _is_even_integer = self._is_abc_even_integer(a, b, c)
+
+            return a, b, c, _is_even_integer
+
+
+        def _is_abc_even_integer(self, a, b, c):
+            return int(a) % 2 == 0 and b == 0 and c > 0
+
+
+    class _Multisynth(_MultisynthBase):
+        DIVIDER_MIN = 8
+        DIVIDER_MAX = 2048
+
+
+        def __init__(self, si, idx):
+            super().__init__(si, idx)
+            self.set_input_source(pll_idx = 0)
+            self.enable_fanout(True)
+
+
+        def set_input_source(self, pll_idx = 0):
+            """
+            Each of these dividers can be set to use PLLA or PLLB as its reference by setting MSx_SRC to 0 or 1 respectively.
+            See bit 5 description of registers 16-23.
+            """
+            valids = range(self._si.N_PLLS)
+            assert pll_idx in valids, 'valid pll_idx: {}'.format(valids)
+
+            self._source = self._si.plls[pll_idx]
+            self._frequency = math.floor(self.source.freq / self.divider)
+            self._si._write_element_by_name('MS{}_SRC'.format(self._idx), pll_idx)
+
+
+        def enable_fanout(self, value = True):
+            self._si._write_element_by_name('MS_FANOUT_EN', 1 if value else 0)
+
+
+        def _validate_abc(self, a, b, c):
+            a = int(a)
+            b = int(b)
+            c = int(c)
+            _is_even_integer = self._is_abc_even_integer(a, b, c)
+
+            if self._idx in self._si.INTEGER_ONLY_MULTISYNTHES:
+                assert _is_even_integer and (6 <= a <= 254), \
+                    '"a" must be an even integer and  (6 <= a <= 254)'
+                b = 0
+                c = 1
+            else:
+                assert self.DIVIDER_MIN + 1 / (self._si.POW_2_DENOMINATOR_BITS - 1) <= (a + b / c) <= self.DIVIDER_MAX, \
+                    'Must {} + 1 / ((2 ** {}) - 1) <=  (a + b / c)  <= {}'.format(self.DIVIDER_MIN,
+                                                                                  self._si.DENOMINATOR_BITS,
+                                                                                  self.DIVIDER_MAX)
+
+            return a, b, c, _is_even_integer
+
+
+        def _set_integer_mode(self, value = True):
+            if self._idx not in self._si.INTEGER_ONLY_MULTISYNTHES:
+                self._si._write_element_by_name('MS{}_INT'.format(self._idx), 1 if value else 0)
+
+
+        def _set_divided_by_4(self, value = True):
+            """
+            Output frequencies greater than 150 MHz are available on Multisynths 0-5. For this frequency range a divide value
+            of 4 must be used by setting
+            MSx_P1=0,
+            MSx_P2=0,
+            MSx_P3=1,
+            MSx_INT=1, and
+            MSx_DIVBY4[1:0]=11b.
+            Set the appropriate feedback Multisynth to generate fVCO=Fout*4.
+            """
+            assert self._idx not in self._si.INTEGER_ONLY_MULTISYNTHES, \
+                'Output frequencies greater than 150 MHz are available only on Multisynths 0-5.'
+
+            if value:
+                self._set_parameters(p1 = 0, p2 = 0, p3 = 1)
+                self._set_integer_mode(True)
+            self._si._write_element_by_name('MS{}_DIVBY4'.format(self._idx), 0x03 if value else 0x00)
+
+
+    class _CLKIN:
+
+        def __init__(self, si, freq = None):
+            self._si = si
+            self._freq = freq
+            self._divider = 1
+            self.enable_fanout(True)
+
+
+        @property
+        def freq(self):
+            return math.floor(self._freq / self._divider)
+
+
+        def _set_divider(self):
+            for d in sorted(self._si.CLKIN_DIVIDERS.keys()):
+                if self._freq / d <= 40e6:
+                    break
+            assert self._freq / d <= 40e6, 'The input frequency range of the PLLis 10 to 40 MHz'
+            self._divider = d
+            self._si._write_element_by_name('CLKIN_DIV', self._si.CLKIN_DIVIDERS[d])
+
+
+        def enable_fanout(self, value = True):
+            self._si._write_element_by_name('CLKIN_FANOUT_EN', 1 if value else 0)
+
+
+    class _Xtal:
+
+        def __init__(self, si, freq = None):
+            self._si = si
+            self.freq = freq
+            self.set_internal_load_capacitance(pF = 10)
+            self.enable_xo_fanout(True)
+
+
+        def set_internal_load_capacitance(self, pF = 10):
             """
             If the source for the PLL is a crystal, PLLx_SRC must be set to 0 in register 15. XTAL_CL[1:0] must also be set to
             match the crystal load capacitance (see register 183).
             """
+            valids = self._si.CRYSTAL_INTERNAL_LOAD_CAPACITANCEs.keys()
+            assert pF in valids, 'valid pF: {}'.format(valids)
             self._si._write_element_by_name('XTAL_CL', self._si.CRYSTAL_INTERNAL_LOAD_CAPACITANCEs[pF])
 
 
-        def get_freq_vco_xtal(self, freq_xtal, a, b, c):
-            return freq_xtal * (a + b / c)
+        def enable_xo_fanout(self, value = True):
+            self._si._write_element_by_name('XO_FANOUT_EN', 1 if value else 0)
 
 
-        def get_freq_vco_clkin(self, freq_clkin, clkin_div, a, b, c):
-            return freq_clkin / clkin_div * (a + b / c)
+    class _VCXO:
 
+        def __init__(self, si, freq = None):
+            self._si = si
+            self.freq = freq
+
+
+        # def get_freq_vco_xtal(self, freq_xtal, a, b, c):
+        #     return freq_xtal * (a + b / c)
+        #
+        #
+        # def get_freq_vco_clkin(self, freq_clkin, clkin_div, a, b, c):
+        #     return freq_clkin / clkin_div * (a + b / c)
 
         def set_vcxo_paramenters(self, a, b, apr = 30):
             """
@@ -957,7 +332,6 @@ class Si535x(Device):
 
             VCXO_Param[21:0] =  1.03 * (128a +  b/10**6) * APR
             """
-
             vcxo_p = 1.03 * (128 * a + b / 10 ** 6) * apr
 
             bits_ranges = ((21, 16), (15, 8), (7, 0))
@@ -969,15 +343,41 @@ class Si535x(Device):
                 self._si._write_element_by_name(element_name, value)
 
 
-        def enable_xo_fanout(self, value = True):
-            self._si._write_element_by_name('XO_FANOUT_EN', 1 if value else 0)
+    class _PLL(_MultisynthBase):
+        FREQ_VCO_MIN = int(600e6)
+        FREQ_VCO_MAX = int(900e6)
+        DIVIDER_MIN = 15
+        DIVIDER_MAX = 90
+        DEFAULT_FVCO = FREQ_VCO_MAX
+        DEFAULT_DIVIDER = FREQ_VCO_MAX
 
 
-    class _PLLs:
-
-        def __init__(self, si):
+        def __init__(self, si, idx):
             self._si = si
-            self._pll_clkin_freq = self._si.freq_mclk
+            self._idx = idx
+            self._name = 'N{}'.format(self._si.PLLs[self._idx])
+            self._source = None
+            self._divider = int(self.DEFAULT_FVCO / self._si.xtal.freq)
+            self.set_input_source(xtal_as_source = True)
+            self.reset()
+
+
+        @property
+        def freq(self):
+            freq = self.source.freq * self._divider  # using "*", not "/" for PLL
+            assert self.FREQ_VCO_MIN <= freq <= self.FREQ_VCO_MAX, 'Fvco must be between 600~900MHz.'
+            return freq
+
+
+        def set_frequency(self, freq):
+            d = freq / self.source.freq
+            a = int(d)
+            b = (d - a) * self._si.POW_2_DENOMINATOR_BITS
+            c = self._si.POW_2_DENOMINATOR_BITS
+            self._set_divider(a, b, c)
+            self._frequency = freq
+            self._si.restore_clocks_freqs()  # adjust multisynches for each clocks.
+            return True
 
 
         def reset_plls(self):
@@ -985,200 +385,165 @@ class Si535x(Device):
             self._si._read_register_by_name('PLL_Reset')  # Synch. These are self clearing bits.
 
 
-        def reset_pll(self, idx):
-            element_name = 'PLL{}_RST'.format(self._si.PLLs[idx])
+        def reset(self):
+            element_name = 'PLL{}_RST'.format(self._si.PLLs[self._idx])
             self._si._write_element_by_name(element_name, 1)
             self._si._read_element_by_name(element_name)  # Synch. This is a self clearing bit.
 
 
-        def set_pll_input_source(self, idx, xtal_as_source = True):
+        def set_input_source(self, xtal_as_source = True):
             """
+            If spread spectrum is not enabled, either of the two PLLs may be used as the source for any outputs of the
+            Si5351A.
+            If both XTAL and CLKIN input options are used simultaneously (Si5351C only), then one PLL must be
+            reserved for use with CLKIN and one for use with the XTAL.
+            Note: PLLA must be used for any spread spectrum-enabled outputs. PLLB must be used for any VCXO outputs.
+
             If a PLL needs to be synchronized to a CMOS clock, PLLx_SRC must be 1.
             The input frequency range of the PLL is 10 to 40 MHz. If CLKIN is > 40 MHz,
             the CLKIN input divider must be used to bring the PLL input within the 10–40 MHz range.
             See CLKIN_DIV[1:0], register 15, bits [7:6].
             """
-            element_name = 'PLL{}_SRC'.format(self._si.PLLs[idx])
+            self._source = self._si.xtal if xtal_as_source else self._si.clkin
+            self._frequency = math.floor(self.source.freq * self.divider)
+
+            element_name = 'PLL{}_SRC'.format(self._si.PLLs[self._idx])
             self._si._write_element_by_name(element_name, 0 if xtal_as_source else 1)
-            self.set_pll_clkin_divider()
+            if not xtal_as_source:
+                self._si.clkin._set_divider()
 
 
-        @property
-        def pll_clkin_freq(self):
-            return self._pll_clkin_freq
-
-
-        def set_pll_clkin_divider(self):
-            for d in sorted(self._si.CLKIN_DIVIDERS.keys()):
-                if self._si.freq_mclk / d <= 40e6:
-                    break
-            assert self._si.freq_mclk / d <= 40e6, 'The input frequency range of the PLLis 10 to 40 MHz'
-            self._pll_clkin_freq = int(self._si.freq_mclk / d)
-            self._si._write_element_by_name('CLKIN_DIV', self._si.CLKIN_DIVIDERS[d])
-
-
-    class _Multisynthes:
-
-        def __init__(self, si):
-            self._si = si
-
-
-        def get_pll_multisynth_divider(self, a, b, c):
-            assert 15 + 1 / ((2 ** self._si.DENOMINATOR_BITS) - 1) <= a <= 90, \
-                'Must 15 + 1 / ((2 ** {}) - 1) <= a <= 90'.format(self._si.DENOMINATOR_BITS)
-
-            p1 = 128 * a + math.floor(128 * b / c) - 512
-            p2 = 128 * b - c * math.floor(128 * b / c)
-            p3 = c
-            return p1, p2, p3
-
-
-        def get_output_multisynth_divider(self, a, b, c):
+        def _set_integer_mode(self, value = True):
             """
-             MS6 and MS7 are integer-only dividers. The valid range
-            of values for these dividers is all even integers between 6 and 254 inclusive. For MS6 and MS7, set MSx_P1
-            directly (e.g., MSx_P1=divide value).
-            """
-            assert 15 + 1 / ((2 ** self._si.DENOMINATOR_BITS) - 1) <= a <= 90, \
-                'Must 15 + 1 / ((2 ** {}) - 1) <= a <= 90'.format(self._si.DENOMINATOR_BITS)
-
-            p1 = 128 * a + math.floor(128 * b / c) - 512
-            p2 = 128 * b - c * math.floor(128 * b / c)
-            p3 = c
-            return p1, p2, p3
+               If a + b/c is an even integer, integer mode may be enabled for PLLA or PLLB by setting parameter FBA_INT or
+               FBB_INT respectively. In most cases setting this bit will improve jitter when using even integer divide values.
+               Whenever spread spectrum is enabled, FBA_INT must be set to 0.
+               """
+            self._si._write_element_by_name('FB{}_INT'.format(self._si.PLLs[self._idx]), 1 if value else 0)
 
 
-        def set_multisynth_integer_mode(self, idx, value = True):
-            assert idx in range(6)
-            self._si._write_element_by_name('MS{}_INT'.format(idx), 1 if value else 0)
+        def _validate_abc(self, a, b, c):
+            a = int(a)
+            b = int(b)
+            c = int(c)
+            _is_even_integer = self._is_abc_even_integer(a, b, c)
+
+            assert self.DIVIDER_MIN + 1 / (self._si.POW_2_DENOMINATOR_BITS - 1) <= (a + b / c) <= self.DIVIDER_MAX, \
+                'Must {} + 1 / ((2 ** {}) - 1) <= (a + b / c) <= {}'.format(self.DIVIDER_MIN,
+                                                                            self._si.DENOMINATOR_BITS,
+                                                                            self.DIVIDER_MAX)
+
+            return a, b, c, _is_even_integer
 
 
-        def force_pll_feedback_multisynth_integer_mode(self, idx, value = True):
-            """
-            If a + b/c is an even integer, integer mode may be enabled for PLLA or PLLB by setting parameter FBA_INT or
-            FBB_INT respectively. In most cases setting this bit will improve jitter when using even integer divide values.
-            Whenever spread spectrum is enabled, FBA_INT must be set to 0.
-            """
-            assert idx in (6, 7)
-            self._si._write_element_by_name('FB{}_INT'.format(self._si.PLLs[idx - 6]), 1 if value else 0)
+    class _Clock(_MultisynthBase):
+
+        DIVIDER_MIN = 1
+        DIVIDER_MAX = 128
 
 
-        def set_multisynth_source(self, idx, pll_idx = 0):
-            """
-            Each of these dividers can be set to use PLLA or PLLB as its reference by setting MSx_SRC to 0 or 1 respectively.
-            See bit 5 description of registers 16-23.
-            """
-            self._si._write_element_by_name('MS{}_SRC'.format(idx), pll_idx)
+        def __init__(self, si, idx,
+                     enable = False,
+                     source = 'MultiSynth',
+                     strength_mA = 8,
+                     disable_state = 'LOW'):
+
+            super().__init__(si, idx)
+
+            self.enable(enable)
+            self.set_input_source(source)
+            self._set_strength(strength_mA)
+            self._set_disable_state(disable_state)
+            self.set_frequency(self._si.FREQ_MCLK)
 
 
-        def set_multisynth_divided_by_4(self, idx, value = True):
-            """
-            Output frequencies greater than 150 MHz are available on Multisynths 0-5. For this frequency range a divide value
-            of 4 must be used by setting
-            MSx_P1=0,
-            MSx_P2=0,
-            MSx_P3=1,
-            MSx_INT=1, and
-            MSx_DIVBY4[1:0]=11b.
-            Set the appropriate feedback Multisynth to generate fVCO=Fout*4.
-            """
-            self._si._write_element_by_name('MS{}_DIVBY4'.format(idx), 0x03 if value else 0x00)
-
-
-        def set_multisynth_parameters(self, multisynth_name, p1, p2 = None, p3 = None):
-            params = (p1, p2, p3)
-
-            bits_8 = ((7, 0))
-            bits_18 = ((17, 16), (15, 8), (7, 0))
-            bits_20 = ((19, 16), (15, 8), (7, 0))
-
-            bits_ranges = {1: bits_8, 2: [], 3: []} if multisynth_name in ['6', '7'] else \
-                {1: bits_18, 2: bits_20, 3: bits_20}
-
-            for i in range(len(params)):
-                param_idx = i + 1
-                for bits_range in bits_ranges[param_idx]:
-                    element_name = 'MS{}_P{}_{}_{}'.format(multisynth_name, param_idx, bits_range[0], bits_range[1])
-                    mask = (2 ** (bits_range[0] - bits_range[1] + 1) - 1) << bits_range[1]
-                    value = (params[i] & mask) >> bits_range[1]
-                    self._si._write_element_by_name(element_name, value)
-
-
-        def enable_multisynth_fanout(self, value = True):
-            self._si._write_element_by_name('MS_FANOUT_EN', 1 if value else 0)
-
-
-        def is_even_integer(self, v):
-            return abs(v - int(v)) < 10 ** (-self._si.DENOMINATOR_BITS) and int(v) % 2 == 0
-
-
-        def is_abc_even_integer(self, a, b, c):
-            return self.is_even_integer(a + b / c)
-
-
-    class _Clocks:
-
-        def __init__(self, si):
-            self._si = si
-
-
-        def set_clock_source(self, idx, source = 'MultiSynth'):
+        def set_input_source(self, source = 'MultiSynth'):
             """
             Generally, Multisynth x should be output on CLKx, however XO, CLKIN, or a divided version of either (see section
             4.2.2 on R dividers) may also be output on each of the CLKx pins. Additionally, MS0 (or a divided version of MS0)
             may be output on CLK0-CLK3, and MS4 (or a divided version of MS4) may be output on CLK4-CLK7. See
             CLKx_SRC description for details.
             """
-            self._si._write_element_by_name('CLK{}_SRC'.format(idx), self._si.CLOCK_SOURCEs[source])
+            valids = self._si.CLOCK_SOURCEs.keys()
+            assert source in valids, 'valid sources: {}'.format(valids)
+
+            self._source = {'XTAL'            : self._si.xtal,
+                            'CLKIN'           : self._si.clkin,
+                            'Group_MultiSynth': self._si.multisynthes[self._idx // 4],
+                            'MultiSynth'      : self._si.multisynthes[self._idx]}[source]
+
+            self._frequency = math.floor(self.source.freq / self.divider)
+            self._si._write_element_by_name('CLK{}_SRC'.format(self._idx), self._si.CLOCK_SOURCEs[source])
 
 
-        def set_clock_strength(self, idx, strength = 8):
-            self._si._write_element_by_name('CLK{}_IDRV'.format(idx), self._si.OUTPUT_STRENGTHs[strength])
+        def set_frequency(self, freq):
+            for d in list(self._si.R_DIVIDERs.keys()):
+                if math.floor(self.source.freq / d) == math.floor(freq):
+                    self._set_divider(d)  # do it within
+                    self._frequency = freq
+                    return True
+                else:
+                    if self.source.set_frequency(freq * d) is True:
+                        self._set_divider(d)  # source can provide the desired freq, adjust R divider again.
+                        self._frequency = freq
+                        return True
 
 
-        def set_clock_invert(self, idx, value = True):
-            self._si._write_element_by_name('CLK{}_INV'.format(idx), 1 if value else 0)
+        @property
+        def enabled(self):
+            return self._si.map.elements['CLK{}_OEB'.format(self._idx)]['element'].value == 0
 
 
-        def enable_all_outputs(self, value = True):
-            self._si._action = 'enable_all_outputs: {}'.format(value)
-            self._si._write_register_by_name('Output_Enable_Control', 0x00 if value else 0xFF)
+        def enable(self, value = True):
+            self._si._action = 'enable_output_clock: {}'.format(value)
+            self._si._write_element_by_name('CLK{}_OEB'.format(self._idx), 0 if value else 1)
+            self.power_down(not value)
 
 
-        def enable_output_clock(self, idx, value = True):
-            self._si._action = 'enable_output_clock: {} {}'.format(idx, value)
-            self._si._write_element_by_name('CLK{}_OEB'.format(idx), 0 if value else 1)
+        @property
+        def power_downed(self):
+            return self._si.map.elements['CLK{}_PDN'.format(self._idx)]['element'].value==1
 
 
-        def mask_output_clock_oeb(self, idx, value = True):
-            self._si._action = 'enable_output_clock_oeb_mask: {} {}'.format(idx, value)
-            self._si._write_element_by_name('OEB_MASK{}'.format(idx), 1 if value else 0)
+        def power_down(self, value = True):
+            self._si._write_element_by_name('CLK{}_PDN'.format(self._idx), 1 if value else 0)
 
 
-        def set_clock_disable_state(self, idx, state = 'LOW'):
-            self._si._write_element_by_name('CLK{}_DIS_STATE'.format(idx), self._si.DISABLE_STATEs[state])
+        def _set_strength(self, mA = 8):
+            valids = self._si.OUTPUT_STRENGTHs.keys()
+            assert mA in valids, 'valid mA: {}'.format(valids)
+            self._si._write_element_by_name('CLK{}_IDRV'.format(self._idx), self._si.OUTPUT_STRENGTHs[mA])
 
 
-        def power_down_all_outputs(self, value = True):
-            for i in range(self._si.N_OUTPUT_CLOCKS):
-                self.power_down_output_clock(idx = i, value = value)
+        def _set_invert(self, value = True):
+            self._si._write_element_by_name('CLK{}_INV'.format(self._idx), 1 if value else 0)
 
 
-        def power_down_output_clock(self, idx, value = True):
-            self._si._write_element_by_name('CLK{}_PDN'.format(idx), 1 if value else 0)
+        def _mask_oeb(self, value = True):
+            self._si._action = 'enable_output_clock_oeb_mask: {}'.format(value)
+            self._si._write_element_by_name('OEB_MASK{}'.format(self._idx), 1 if value else 0)
 
 
-        def set_r_divider(self, idx, divider = 1):
+        def _set_disable_state(self, state = 'LOW'):
+            valids = self._si.DISABLE_STATEs.keys()
+            assert state in valids, 'valid states: {}'.format(valids)
+            self._si._write_element_by_name('CLK{}_DIS_STATE'.format(self._idx), self._si.DISABLE_STATEs[state])
+
+
+        def _set_divider(self, divider = 1):
             """
             The R dividers can be used to generate frequencies below about 500 kHz. Each individual output R divider can be
             set to 1, 2, 4, 8,....128 by writing the proper setting for Rx_DIV. Set this parameter to generate frequencies down to
             8kHz
             """
-            assert divider in self._si.R_DIVIDERs.keys()
-            self._si._write_element_by_name('R{}_DIV'.format(idx), self._si.R_DIVIDERs[divider])
+            valids = self._si.R_DIVIDERs.keys()
+            assert divider in valids, 'valid divider: {}'.format(valids)
+
+            self._divider = divider
+            self._si._write_element_by_name('R{}_DIV'.format(self._idx), self._si.R_DIVIDERs[divider])
 
 
-        def enable_phase_offset(self, offset_seconds, freq_vco):
+        def _enable_phase_offset(self, offset_seconds):
             """
             However, it's important to note that Multisynth integer mode cannot be used when adding phase offsets in NVM. In
             other words, MSx_INT needs to be set to 0 if phase offsets need to be enabled.
@@ -1191,45 +556,61 @@ class Si535x(Device):
 
             CLKx_PHOFF[4:0] = Round(DesiredOffset_sec * 4 * FVCO)
             """
+            if isinstance(self.source, self._si.Multisynth):
+                freq_vco = self.source.source.freq  # PLL
+                self._si.multisynthes[self._idx]._set_integer_mode(False)
+            else:
+                freq_vco = self.source.freq  # XTAL, CLKIN
 
             offset = round(offset_seconds * 4 * freq_vco)
+            self._set_initial_phase_offset(offset)
 
 
-        def set_clock_initial_phase_offset(self, idx, value = 0):
+        def _set_initial_phase_offset(self, value = 0):
             """
             CLKx_PHOFF[6:0] is an unsigned integer with one LSB equivalent to a time delay of
             Tvco/4, where Tvco is the period of the VCO/PLL associated with this output.
             """
-            assert idx in range(6)
-            self._si._write_element_by_name('CLK{}_PHOFF'.format(idx), value & 0x3F)
-
-
-        def enable_clkin_fanout(self, value = True):
-            self._si._write_element_by_name('CLKIN_FANOUT_EN', 1 if value else 0)
+            assert self._idx in range(6)
+            self._si._write_element_by_name('CLK{}_PHOFF'.format(self._idx), value & 0x3F)
 
 
     class _SpreadSpectrum:
 
         def __init__(self, si):
             self._si = si
+            self.enable(False)
 
 
-        def enable_spread_spectrum(self, value = True):
+        def enable(self, value = True):
             """
-            spread spectrum is only supported by PLLA, and the VCXO functionality is only
-            supported by PLLB. When using the VCXO function, set the MSNB divide ratio a + b/c such that c = 10**6. This must
+            spread spectrum is only supported by PLLA, and the VCXO functionality is only supported by PLLB.
+            When using the VCXO function, set the MSNB divide ratio a + b/c such that c = 10**6. This must
             be taken into consideration when configuring a frequency plan.
-              Whenever spread spectrum is enabled, FBA_INT must be set to 0.
+
+            Whenever spread spectrum is enabled, FBA_INT must be set to 0.
 
               The Spread Spectrum Enable control pin is available on the Si5351A and B devices. Spread spectrum enable
             functionality is a logical OR of the SSEN pin and SSC_EN register bit, so for the SSEN pin to work properly, the
             SSC_EN register bit must be set to 0.
             """
-
+            if value:
+                self._si.plls[self._si.PLLs.index('A')]._set_integer_mode(False)
             self._si._write_element_by_name('SSC_EN', 1 if value else 0)
 
 
-        def set_down_spread_spectrum(self, freq_pfd, ssc_amp, a, b, c):
+        def enable_ssen_pin(self, value = True):
+            '''
+            The Spread Spectrum Enable control pin is available on the Si5351A and B devices. Spread spectrum enable
+            functionality is a logical OR of the SSEN pin and SSC_EN register bit, so for the SSEN pin to work properly, the
+            SSC_EN register bit must be set to 0.
+            '''
+            if value:
+                self.enable(True)
+                self._si._write_element_by_name('SSC_EN', 0)
+
+
+        def set_down_spread(self, freq_pfd, ssc_amp, a, b, c):
             """
             For down spread, four spread spectrum parameters need to be written: SSUDP[11:0], SSDN_P1[11:0],
             SSDN_P2[14:0], and SSDN_P3[14:0].
@@ -1245,18 +626,20 @@ class Si535x(Device):
             ssup_p2 = 0
             ssup_p3 = 1
 
-            self.set_spread_spectrum_parameters('UDP', ssudp)
-            self.set_spread_spectrum_parameters('UP', ssup_p1, ssup_p2, ssup_p3)
-            self.set_spread_spectrum_parameters('DN', ssdn_p1, ssdn_p2, ssdn_p3)
+            self._set_parameters('UDP', ssudp)
+            self._set_parameters('UP', ssup_p1, ssup_p2, ssup_p3)
+            self._set_parameters('DN', ssdn_p1, ssdn_p2, ssdn_p3)
 
             return ssudp, (ssup_p1, ssup_p2, ssup_p3), (ssdn_p1, ssdn_p2, ssdn_p3)
 
 
-        def set_center_spread_spectrum(self, freq_pfd, ssc_amp, a, b, c):
+        def set_center_spread(self, a, b, c, ssc_amp = 0.01):
             """
             For center spread, seven spread spectrum parameters need to be written: SSUDP[11:0], SSDN_P1[11:0],
             SSDN_P2[14:0], SSDN_P3[14:0], SSUP_P1[11:0], SSUP_P2[14:0], and SSUP_P3[14:0].
             """
+
+            freq_pfd = self._si.plls[self._si.PLLs.index('A')].source.freq
 
             ssudp = math.floor(freq_pfd / (4 * 31500))
 
@@ -1270,14 +653,14 @@ class Si535x(Device):
             ssdn_p2 = 32767 * (ssdn - ssdn_p1)
             ssdn_p3 = 32767
 
-            self.set_spread_spectrum_parameters('UDP', ssudp)
-            self.set_spread_spectrum_parameters('UP', ssup_p1, ssup_p2, ssup_p3)
-            self.set_spread_spectrum_parameters('DN', ssdn_p1, ssdn_p2, ssdn_p3)
+            self._set_parameters('UDP', ssudp)
+            self._set_parameters('UP', ssup_p1, ssup_p2, ssup_p3)
+            self._set_parameters('DN', ssdn_p1, ssdn_p2, ssdn_p3)
 
             return ssudp, (ssup_p1, ssup_p2, ssup_p3), (ssdn_p1, ssdn_p2, ssdn_p3)
 
 
-        def set_spread_spectrum_parameters(self, name, p1, p2 = None, p3 = None):
+        def _set_parameters(self, name, p1, p2 = None, p3 = None):
             """
             Spread spectrum can be enabled on any Multisynth output that uses PLLA as its reference. Valid ranges for spread
             spectrum include –0.1% to –2.5% down spread and up to ± 1.5% center spread. This spread modulation rate is
@@ -1308,12 +691,13 @@ class Si535x(Device):
 
     def __init__(self, i2c, i2c_address = I2C_ADDRESS, pin_oeb = None, pin_ssen = None,
                  registers_map = None, registers_values = None,
-                 n_channels = N_OUTPUT_CLOCKS, freq_mclk = FREQ_MCLK,
+                 n_channels = N_OUTPUT_CLOCKS,
+                 freq_xtal = FREQ_MCLK, freq_clkin = FREQ_MCLK, freq_vcxo = FREQ_MCLK,
                  commands = None):
 
         registers_map = _get_registers_map() if registers_map is None else registers_map
 
-        super().__init__(n_channels = n_channels, freq_mclk = freq_mclk,
+        super().__init__(n_channels = n_channels, freq_mclk = freq_xtal,
                          registers_map = registers_map, registers_values = registers_values,
                          commands = commands)
 
@@ -1322,11 +706,14 @@ class Si535x(Device):
         self._pin_oeb = pin_oeb
         self._pin_ssen = pin_ssen
 
+        # internal components
         self.interrupts = self._Interrupts(self)
-        self.crystal = self._Crystal(self)
-        self.plls = self._PLLs(self)
-        self.multisynthes = self._Multisynthes(self)
-        self.clocks = self._Clocks(self)
+        self.xtal = self._Xtal(self, freq_xtal)
+        self.clkin = self._CLKIN(self, freq_clkin)
+        self.vcxo = self._VCXO(self, freq_vcxo)
+        self.plls = [self._PLL(self, i) for i in range(self.N_PLLS)]
+        self.multisynthes = [self._Multisynth(self, i) for i in range(self.N_OUTPUT_CLOCKS)]
+        self.clocks = [self._Clock(self, i) for i in range(self.N_OUTPUT_CLOCKS)]
         self.spread_spectrum = self._SpreadSpectrum(self)
 
         self.init()
@@ -1337,16 +724,24 @@ class Si535x(Device):
         # step 4: define inputs and features
         #     input mode
         #         mode enable/disable
+        # self.enable(False)
+
         #         frequency 25/27 MHz
         #         internal load 0/6/8/10 pF
+        # self.xtal.set_crystal_internal_load_capacitance(pF = 10)
+
         #     Feature
         #         Spread Spectrum Clock Config
         #             enable True/False
+        # self.spread_spectrum.enable(False)
+
         #             direction down/center
         #             amplitude 0.1%
         # step 5: define output frequencies
         #     Out0
         #         mode enabled/disabled/unused
+
+        self.clocks[0].enable()
         #         frequency ??? Hz (ex. 19.2MHz, 2*IN0, OUT5, OUT5 + 5ppb)
         #         feature SSC
         #     Out1
@@ -1368,18 +763,82 @@ class Si535x(Device):
 
     def enable_output(self, value = True):
         self._action = 'enable_output: {}'.format(value)
-        self.clocks.enable_all_outputs(value)
+        self._enable_all_outputs(value)
 
 
-    def enable(self, value):
+    def enable(self, value = True):
         self._action = 'enable {}'.format(value)
-        self.clocks.power_down_all_outputs(not value)
+        self._power_down_all_outputs(not value)
         self.enable_output(value)
+
+
+    def restore_clocks_freqs(self):
+        for clk in self.clocks:
+            clk.restore_frequency()
+
+
+    def find_integer_dividers(self, freq_desired, even_only = True, torance_hz = 1, freq_ref = FREQ_MCLK):
+
+        # hierachy structure
+        xtal = self._Xtal(self, freq_ref)
+        pll = self._PLL(self, 0)
+        multisynth = self._Multisynth(self, 0)
+        clock = self._Clock(self, 0)
+
+        pll._source = xtal
+        multisynth._source = pll
+        clock._source = multisynth
+
+        # possible dividers
+        divider_plls = range(pll.DIVIDER_MIN, pll.DIVIDER_MAX + 1)
+        divider_multisynthes = range(multisynth.DIVIDER_MIN, multisynth.DIVIDER_MAX + 1)
+        divider_rs = list(self.R_DIVIDERs.keys())
+
+        results = []
+
+        for dp in divider_plls:
+            for dm in divider_multisynthes:
+                for dr in divider_rs:
+                    try:
+                        if even_only:
+                            assert dp % 2 == 0 and dm % 2 == 0
+
+                        pll._divider = dp
+                        multisynth._divider = dm
+                        clock._divider = dr
+
+                        freq_clock = clock.freq
+                        diff = abs(freq_clock - freq_desired)
+
+                        if diff < torance_hz:
+                            match = ((dp, dm, dr), (xtal.freq, pll.freq, multisynth.freq, clock.freq))
+                            results.append(match)
+                    except:
+                        pass
+        return results
+
+
+    def find_integer_pll_dividers_for_clocks(self, desired_clock_freqs, *args, **kwargs):
+        freqs_matches = [self.find_integer_dividers(freq, *args, **kwargs) for freq in desired_clock_freqs]
+        freqs_pll_dividers = [set([row[0][0] for row in freq_matches]) for freq_matches in freqs_matches]
+        common_pll_dividers = set.intersection(*freqs_pll_dividers)
+        return common_pll_dividers, freqs_pll_dividers, freqs_matches
 
 
     @property
     def status(self):
         return self._read_register_by_name('Device_Status')
+
+
+    # =================================================================
+
+    def _enable_all_outputs(self, value = True):
+        self._write_register_by_name('Output_Enable_Control', 0x00 if value else 0xFF)
+
+
+    def _power_down_all_outputs(self, value = True):
+        for i in range(self.N_OUTPUT_CLOCKS):
+            self.clocks[i].power_down(value)
 
 
     # =================================================================
@@ -1395,3 +854,42 @@ class Si535x(Device):
         self._show_bus_data(bytes([value]), address = register.address, reading = True)
         self._print_register(register)
         return value
+
+
+
+class Si535x_mini:
+    OUTPUT_ENABLE_CONTROL_ADDRESS = 3
+
+
+    def __init__(self, i2c, i2c_address = Si535x.I2C_ADDRESS, registers_values = None):
+        self._i2c = I2C(i2c, i2c_address)
+        self._i2c_address = i2c_address
+
+        self.enable(False)
+
+        if registers_values is not None:
+            for (address, value) in registers_values:
+                self._write_register(address, value)
+
+        self.enable(True)
+
+
+    def enable(self, value = True):
+        self._action = 'enable {}'.format(value)
+        self._enable_all_outputs(value)
+
+
+    # =================================================================
+
+    def _enable_all_outputs(self, value = True):
+        self._write_register(self.OUTPUT_ENABLE_CONTROL_ADDRESS, 0x00 if value else 0xFF)
+
+
+    # =================================================================
+
+    def _write_register(self, address, value):
+        return self._i2c.write_byte(address, value)
+
+
+    def _read_register(self, address):
+        return self._i2c.read_byte(address)
