@@ -47,7 +47,7 @@ class Si535x(Device):
             return self._si._read_register_by_name('Interrupt_Status_Mask')
 
 
-        def set_masks(self, mask = 0):
+        def set_masks(self, mask = 0x00):
             self._si._write_register_by_name('Interrupt_Status_Mask', mask)
 
 
@@ -63,7 +63,7 @@ class Si535x(Device):
 
 
         def clear_stickys(self):
-            self._si._write_register_by_name('Interrupt_Status_Sticky', 0)
+            self._si._write_register_by_name('Interrupt_Status_Sticky', 0x00)
 
 
         def clear_sticky(self, interrupt_name):
@@ -265,14 +265,19 @@ class Si535x(Device):
 
         @property
         def freq(self):
-            return math.floor(self._freq / self._divider)
+            return math.floor(self._freq / self.divider)
+
+
+        @property
+        def divider(self):
+            return self._divider
 
 
         def _set_divider(self):
             for d in sorted(self._si.CLKIN_DIVIDERS.keys()):
                 if self._freq / d <= 40e6:
                     break
-            assert self._freq / d <= 40e6, 'The input frequency range of the PLLis 10 to 40 MHz'
+            assert 10e6 <= self._freq / d <= 40e6, 'The input frequency range of the PLLis 10 to 40 MHz'
             self._divider = d
             self._si._write_element_by_name('CLKIN_DIV', self._si.CLKIN_DIVIDERS[d])
 
@@ -287,7 +292,7 @@ class Si535x(Device):
             self._si = si
             self.freq = freq
             self.set_internal_load_capacitance(pF = 10)
-            self.enable_xo_fanout(True)
+            self.enable_fanout(True)
 
 
         def set_internal_load_capacitance(self, pF = 10):
@@ -300,7 +305,7 @@ class Si535x(Device):
             self._si._write_element_by_name('XTAL_CL', self._si.CRYSTAL_INTERNAL_LOAD_CAPACITANCEs[pF])
 
 
-        def enable_xo_fanout(self, value = True):
+        def enable_fanout(self, value = True):
             self._si._write_element_by_name('XO_FANOUT_EN', 1 if value else 0)
 
 
@@ -318,7 +323,7 @@ class Si535x(Device):
         # def get_freq_vco_clkin(self, freq_clkin, clkin_div, a, b, c):
         #     return freq_clkin / clkin_div * (a + b / c)
 
-        def set_vcxo_paramenters(self, a, b, apr = 30):
+        def _set_paramenters(self, a, b, apr = 30):
             """
             The Si5351B combines free-running clock generation and a VCXO in a single package. The VCXO architecture of
             the Si5350B eliminates the need for an external pullable crystal. The “pulling” is done at PLLB. Only a standard,
@@ -364,7 +369,7 @@ class Si535x(Device):
 
         @property
         def freq(self):
-            freq = self.source.freq * self._divider  # using "*", not "/" for PLL
+            freq = self.source.freq * self.divider  # using "*", not "/" for PLL
             assert self.FREQ_VCO_MIN <= freq <= self.FREQ_VCO_MAX, 'Fvco must be between 600~900MHz.'
             return freq
 
@@ -502,7 +507,7 @@ class Si535x(Device):
 
         @property
         def power_downed(self):
-            return self._si.map.elements['CLK{}_PDN'.format(self._idx)]['element'].value==1
+            return self._si.map.elements['CLK{}_PDN'.format(self._idx)]['element'].value == 1
 
 
         def power_down(self, value = True):
@@ -610,14 +615,17 @@ class Si535x(Device):
                 self._si._write_element_by_name('SSC_EN', 0)
 
 
-        def set_down_spread(self, freq_pfd, ssc_amp, a, b, c):
+        def set_down_spread(self, ssc_amp = 0.01):
             """
             For down spread, four spread spectrum parameters need to be written: SSUDP[11:0], SSDN_P1[11:0],
             SSDN_P2[14:0], and SSDN_P3[14:0].
             """
+            pll = self._si.plls[self._si.PLLs.index('A')]
+            freq_pfd = pll.source.freq
+
             ssudp = math.floor(freq_pfd / (4 * 31500))
 
-            ssdn = 64 * (a + b / c) * ssc_amp / ((1 + ssc_amp) * ssudp)
+            ssdn = 64 * pll.divider * ssc_amp / ((1 + ssc_amp) * ssudp)
             ssdn_p1 = math.floor(ssdn)
             ssdn_p2 = 32767 * (ssdn - ssdn_p1)
             ssdn_p3 = 32767
@@ -633,22 +641,22 @@ class Si535x(Device):
             return ssudp, (ssup_p1, ssup_p2, ssup_p3), (ssdn_p1, ssdn_p2, ssdn_p3)
 
 
-        def set_center_spread(self, a, b, c, ssc_amp = 0.01):
+        def set_center_spread(self, ssc_amp = 0.01):
             """
             For center spread, seven spread spectrum parameters need to be written: SSUDP[11:0], SSDN_P1[11:0],
             SSDN_P2[14:0], SSDN_P3[14:0], SSUP_P1[11:0], SSUP_P2[14:0], and SSUP_P3[14:0].
             """
-
-            freq_pfd = self._si.plls[self._si.PLLs.index('A')].source.freq
+            pll = self._si.plls[self._si.PLLs.index('A')]
+            freq_pfd = pll.source.freq
 
             ssudp = math.floor(freq_pfd / (4 * 31500))
 
-            ssup = 128 * (a + b / c) * ssc_amp / ((1 - ssc_amp) * ssudp)
+            ssup = 128 * pll.divider * ssc_amp / ((1 - ssc_amp) * ssudp)
             ssup_p1 = math.floor(ssup)
             ssup_p2 = 32767 * (ssup - ssup_p1)
             ssup_p3 = 32767
 
-            ssdn = 128 * (a + b / c) * ssc_amp / ((1 + ssc_amp) * ssudp)
+            ssdn = 128 * pll.divider * ssc_amp / ((1 + ssc_amp) * ssudp)
             ssdn_p1 = math.floor(ssdn)
             ssdn_p2 = 32767 * (ssdn - ssdn_p1)
             ssdn_p3 = 32767
@@ -858,38 +866,49 @@ class Si535x(Device):
 
 
 class Si535x_mini:
+    I2C_ADDRESS = 0x60
+    N_REGISTERS = 188
     OUTPUT_ENABLE_CONTROL_ADDRESS = 3
 
 
-    def __init__(self, i2c, i2c_address = Si535x.I2C_ADDRESS, registers_values = None):
+    def __init__(self, i2c, i2c_address = I2C_ADDRESS, registers_values = None):
         self._i2c = I2C(i2c, i2c_address)
         self._i2c_address = i2c_address
 
         self.enable(False)
 
         if registers_values is not None:
-            for (address, value) in registers_values:
-                self._write_register(address, value)
+            self.write_all_registers(registers_values)
 
         self.enable(True)
 
 
     def enable(self, value = True):
-        self._action = 'enable {}'.format(value)
-        self._enable_all_outputs(value)
+        self.write_register(self.OUTPUT_ENABLE_CONTROL_ADDRESS, 0x00 if value else 0xFF)
 
 
-    # =================================================================
-
-    def _enable_all_outputs(self, value = True):
-        self._write_register(self.OUTPUT_ENABLE_CONTROL_ADDRESS, 0x00 if value else 0xFF)
+    def read_register(self, address):
+        return self._i2c.read_byte(address)
 
 
-    # =================================================================
+    def read_all_registers(self):
+        addressed_values = []
+        for address in range(self.N_REGISTERS):
+            try:
+                value = self.read_register(address)
+                addressed_values.append((address, value))
+            except:
+                pass
+        return addressed_values
 
-    def _write_register(self, address, value):
+
+    def write_register(self, address, value):
         return self._i2c.write_byte(address, value)
 
 
-    def _read_register(self, address):
-        return self._i2c.read_byte(address)
+    def write_all_registers(self, addressed_values):
+        for (address, value) in addressed_values:
+            try:
+                self.write_register(address, value)
+            except:
+                pass
