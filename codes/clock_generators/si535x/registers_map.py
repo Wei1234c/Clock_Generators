@@ -852,7 +852,8 @@ def _get_registers_map():
     regs_map = RegistersMap(name = 'Si5351', description = 'Si5351 registers.', registers = raw_registers)
 
     reg = regs_map.registers['Crystal_Internal_Load_Capacitance']
-    reg.default_value = 0xC0
+    reg.elements['Reserved_0'].read_only = False
+    reg.default_value = 0xD2
     reg.reset()
 
     element = regs_map.elements['SS_NCLK']['element']

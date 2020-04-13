@@ -1,7 +1,6 @@
 # https://www.silabs.com/documents/public/data-sheets/Si5351-B.pdf
 # https://www.silabs.com/documents/public/application-notes/AN619.pdf
 
-
 from .registers_map import _get_registers_map
 
 
@@ -75,13 +74,14 @@ class Si535x(Device):
     class _MultisynthBase:
         DIVIDER_MIN = None
         DIVIDER_MAX = None
+        DIVIDER_DEFAULT = None
 
 
         def __init__(self, si, idx):
             self._si = si
             self._idx = idx
             self._name = str(idx)
-            self._divider = self.DIVIDER_MAX
+            self._set_divider(self.DIVIDER_DEFAULT)
             self._source = None
             # self.set_input_source()  # need implement
 
@@ -129,9 +129,12 @@ class Si535x(Device):
             a, b, c, _is_even_integer = self._validate_abc(a, b, c)
             self._divider = a + b / c
 
+            _is_even_integer = False
+
             if _is_even_integer:
                 self._set_integer_mode(True)
                 p1 = a if self._idx in self._si.INTEGER_ONLY_MULTISYNTHES else 128 * a + math.floor(128 * b / c) - 512
+                # p1 = 128 * a + math.floor(128 * b / c) - 512
                 p2 = 0
                 p3 = 1
             else:
@@ -184,6 +187,7 @@ class Si535x(Device):
     class _Multisynth(_MultisynthBase):
         DIVIDER_MIN = 8
         DIVIDER_MAX = 2048
+        DIVIDER_DEFAULT = 16
 
 
         def __init__(self, si, idx):
@@ -362,9 +366,11 @@ class Si535x(Device):
             self._idx = idx
             self._name = 'N{}'.format(self._si.PLLs[self._idx])
             self._source = None
-            self._divider = int(self.DEFAULT_FVCO / self._si.xtal.freq)
+            # self._divider =
+            self._set_divider(math.floor(self.DEFAULT_FVCO / self._si.xtal.freq))
             self.set_input_source(xtal_as_source = True)
-            self.reset()
+            # self.set_frequency(self.DEFAULT_FVCO)
+            # self.reset()
 
 
         @property
@@ -387,13 +393,11 @@ class Si535x(Device):
 
         def reset_plls(self):
             self._si._write_register_by_name('PLL_Reset', 0xA0)
-            self._si._read_register_by_name('PLL_Reset')  # Synch. These are self clearing bits.
 
 
         def reset(self):
             element_name = 'PLL{}_RST'.format(self._si.PLLs[self._idx])
             self._si._write_element_by_name(element_name, 1)
-            self._si._read_element_by_name(element_name)  # Synch. This is a self clearing bit.
 
 
         def set_input_source(self, xtal_as_source = True):
@@ -445,6 +449,7 @@ class Si535x(Device):
 
         DIVIDER_MIN = 1
         DIVIDER_MAX = 128
+        DIVIDER_DEFAULT = 1
 
 
         def __init__(self, si, idx,
@@ -714,20 +719,26 @@ class Si535x(Device):
         self._pin_oeb = pin_oeb
         self._pin_ssen = pin_ssen
 
-        # internal components
-        self.interrupts = self._Interrupts(self)
-        self.xtal = self._Xtal(self, freq_xtal)
-        self.clkin = self._CLKIN(self, freq_clkin)
-        self.vcxo = self._VCXO(self, freq_vcxo)
-        self.plls = [self._PLL(self, i) for i in range(self.N_PLLS)]
-        self.multisynthes = [self._Multisynth(self, i) for i in range(self.N_OUTPUT_CLOCKS)]
-        self.clocks = [self._Clock(self, i) for i in range(self.N_OUTPUT_CLOCKS)]
-        self.spread_spectrum = self._SpreadSpectrum(self)
+        self._freq_xtal = freq_xtal
+        self._freq_clkin = freq_clkin
+        self._freq_vcxo = freq_vcxo
 
         self.init()
 
 
     def init(self):
+        self._action = 'init'
+        self.enable_output(False)
+
+        # internal components
+        self.interrupts = self._Interrupts(self)
+        self.xtal = self._Xtal(self, self._freq_xtal)
+        self.clkin = self._CLKIN(self, self._freq_clkin)
+        self.vcxo = self._VCXO(self, self._freq_vcxo)
+        self.plls = [self._PLL(self, i) for i in range(self.N_PLLS)]
+        self.multisynthes = [self._Multisynth(self, i) for i in range(self.N_OUTPUT_CLOCKS)]
+        self.clocks = [self._Clock(self, i) for i in range(self.N_OUTPUT_CLOCKS)]
+        self.spread_spectrum = self._SpreadSpectrum(self)
 
         # step 4: define inputs and features
         #     input mode
@@ -749,7 +760,7 @@ class Si535x(Device):
         #     Out0
         #         mode enabled/disabled/unused
 
-        self.clocks[0].enable()
+        # self.clocks[0].enable()
         #         frequency ??? Hz (ex. 19.2MHz, 2*IN0, OUT5, OUT5 + 5ppb)
         #         feature SSC
         #     Out1
@@ -764,8 +775,7 @@ class Si535x(Device):
         #         format driver_strength 2/4/6/8mA
         #         disable state stop_low/stop_high/HiZ
 
-        self._action = 'init'
-        self.enable_output(False)
+        self.restore_clocks_freqs()
         self.start()
 
 
