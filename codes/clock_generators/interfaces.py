@@ -223,7 +223,7 @@ class Device:
 
 
     def read_all_registers(self):
-        for reg in self.map._registers:
+        for reg in self.map._registers: 
             self._read_n_load_register(reg)
         return self.map.address_name_values
 

@@ -855,6 +855,7 @@ def _get_registers_map():
     reg.elements['Reserved_0'].read_only = False
     reg.default_value = 0xD2
     reg.reset()
+    reg.elements['Reserved_0'].read_only = True
 
     element = regs_map.elements['SS_NCLK']['element']
     element.value = 0
