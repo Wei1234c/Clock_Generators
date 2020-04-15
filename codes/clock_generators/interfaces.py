@@ -16,14 +16,11 @@ class Device:
     DEBUG_MODE_SHOW_BUS_DATA = DEBUG_MODE
     DEBUG_MODE_PRINT_REGISTER = DEBUG_MODE
 
+    FREQ_REF = None
     N_OUTPUT_CLOCKS = None
-    N_PLLS = None
-    FREQ_MCLK = None
-    I2C_ADDRESS = None
-    DENOMINATOR_BITS = None
 
 
-    def __init__(self, n_channels = N_OUTPUT_CLOCKS, freq_mclk = FREQ_MCLK,
+    def __init__(self, n_channels = N_OUTPUT_CLOCKS, freq_mclk = FREQ_REF,
                  registers_map = None, registers_values = None,
                  commands = None):
 
@@ -223,7 +220,7 @@ class Device:
 
 
     def read_all_registers(self):
-        for reg in self.map._registers: 
+        for reg in self.map._registers:
             self._read_n_load_register(reg)
         return self.map.address_name_values
 

@@ -1,14 +1,13 @@
 # https://www.silabs.com/documents/public/data-sheets/Si5351-B.pdf
 # https://www.silabs.com/documents/public/application-notes/AN619.pdf
 # https://groups.io/g/BITX20/topic/si5351a_facts_and_myths/5430607
-
-
-from .registers_map import _get_registers_map
+# https://www.silabs.com/content/usergenerated/asi/cloud/attachments/siliconlabs/en/community/groups/timing/knowledge-base/jcr:content/content/primary/blog/modifying_the_feedba-K8Pv/311668.pdf
 
 
 try:
     from ..interfaces import *
     from utilities.adapters.peripherals import I2C
+    from .registers_map import _get_registers_map
 except:
     from interfaces import *
     from peripherals import I2C
@@ -17,24 +16,10 @@ except:
 
 class Si535x(Device):
     I2C_ADDRESS = 0x60
-    FREQ_MCLK = int(25e6)
-    N_OUTPUT_CLOCKS = 8
-    N_USED_OUTPUT_CLOCKS = 3
-    N_HIGH_FREQUENCY_multisynths = 6
-    N_multisynths_WITH_OUTPUT_SKEW = 6
-    PLLs = ('A', 'B')
-    N_PLLS = len(PLLs)
-    DENOMINATOR_BITS = 20
-    POW_2_DENOMINATOR_BITS = 2 ** DENOMINATOR_BITS - 1
-    READ_ONLY_REGISTERS = (0,)
-    INTEGER_ONLY_multisynths = (6, 7)
+    READ_ONLY_REGISTERS = [0]
 
-    CLKIN_DIVIDERS = {1: 0x00, 2: 0x01, 4: 0x20, 8: 0x03}
-    CLOCK_SOURCEs = {'XTAL': 0x00, 'CLKIN': 0x01, 'Group_MultiSynth': 0x2, 'MultiSynth': 0x3}
-    OUTPUT_STRENGTHs = {2: 0x00, 4: 0x01, 6: 0x02, 8: 0x03}
-    CRYSTAL_INTERNAL_LOAD_CAPACITANCEs = {6: 0x01, 8: 0x02, 10: 0x03}
-    DISABLE_STATEs = {'LOW': 0x00, 'HIGH': 0x01, 'HIGH_IMPEDANCE': 0x02, 'NEVER_DISABLED': 0x03}
-    R_DIVIDERs = {1: 0, 2: 1, 4: 2, 8: 3, 16: 4, 32: 5, 64: 6, 128: 7}
+    FREQ_REF = int(25e6)
+    N_OUTPUT_CLOCKS = 8
 
 
     class _Interrupts:
@@ -51,10 +36,12 @@ class Si535x(Device):
 
 
         def set_masks(self, mask = 0x00):
+            self._si._action = 'set_masks {}'.format(mask)
             self._si._write_register_by_name('Interrupt_Status_Mask', mask)
 
 
         def set_mask(self, interrupt_name, value = True):
+            self._si._action = 'set_mask {} {}'.format(interrupt_name, value)
             valids = self._si.map.registers['Interrupt_Status_Mask'].elements.keys()
             assert interrupt_name in valids, 'valid names: {}'.format(valids)
             self._si._write_element_by_name('{}_MASK'.format(interrupt_name.upper()), 1 if value else 0)
@@ -66,10 +53,12 @@ class Si535x(Device):
 
 
         def clear_stickys(self):
+            self._si._action = 'clear_stickys'
             self._si._write_register_by_name('Interrupt_Status_Sticky', 0x00)
 
 
         def clear_sticky(self, interrupt_name):
+            self._si._action = 'clear_sticky {}'.format(interrupt_name)
             valids = self._si.map.registers['Interrupt_Status_Sticky'].elements.keys()
             assert interrupt_name in valids, 'valid names: {}'.format(valids)
             self._si._write_element_by_name('{}_STKY'.format(interrupt_name.upper()), 0)
@@ -79,6 +68,13 @@ class Si535x(Device):
         DIVIDER_MIN = None
         DIVIDER_MAX = None
         DIVIDER_DEFAULT = None
+
+        DENOMINATOR_BITS = 20
+        POW_2_DENOMINATOR_BITS = 2 ** DENOMINATOR_BITS - 1
+
+        N_HIGH_FREQUENCY_MULTISYNTHS = 6
+        N_MULTISYNTHS_WITH_OUTPUT_SKEW = 6
+        INTEGER_ONLY_MULTISYNTHS = (6, 7)
 
 
         def __init__(self, si, idx):
@@ -98,8 +94,15 @@ class Si535x(Device):
 
 
         def set_input_source(self, source):
+            self._si._action = 'set_input_source {}'.format(source)
             self._source = source
             self._frequency = math.floor(self.source.freq / self.divider)
+
+
+        @property
+        def pll(self):
+            if isinstance(self.source, self._si._PLL):
+                return self.source
 
 
         @property
@@ -108,16 +111,18 @@ class Si535x(Device):
 
 
         def set_frequency(self, freq):
+            self._si._action = 'set_frequency {}'.format(freq)
             d = self.source.freq / freq
             a = int(d)
-            b = (d - a) * self._si.POW_2_DENOMINATOR_BITS
-            c = self._si.POW_2_DENOMINATOR_BITS
+            b = (d - a) * self.POW_2_DENOMINATOR_BITS
+            c = self.POW_2_DENOMINATOR_BITS
             self._set_divider(a, b, c)
             self._frequency = freq
             return True
 
 
-        def restore_frequency(self, ):
+        def restore_frequency(self):
+            self._si._action = 'restore_frequency'
             self.set_frequency(self._frequency)
 
 
@@ -137,18 +142,25 @@ class Si535x(Device):
 
             if _is_even_integer:
                 self._set_integer_mode(True)
-                p1 = a if self._idx in self._si.INTEGER_ONLY_multisynths else 128 * a + math.floor(128 * b / c) - 512
+                # p1 = a if self._idx in self.INTEGER_ONLY_MULTISYNTHS else 128 * a + math.floor(128 * b / c) - 512
+                p1 = a if self._idx in self.INTEGER_ONLY_MULTISYNTHS else 128 * a + (128 * b / c) - 512
                 p2 = 0
                 p3 = 1
             else:
                 self._set_integer_mode(False)
-                p1 = 128 * a + math.floor(128 * b / c) - 512
-                p2 = 128 * b - c * math.floor(128 * b / c)
+                # p1 = 128 * a + math.floor(128 * b / c) - 512
+                # p2 = 128 * b - c * math.floor(128 * b / c)
+                p1 = 128 * a + (128 * b / c) - 512
+                p2 = 128 * b - c * (128 * b / c)
                 p3 = c
 
-            value = self._set_parameters(p1, p2, p3)
+            p1 = math.floor(p1)
+            p2 = math.floor(p2)
+            p3 = math.floor(p3)
+
+            result = self._set_parameters(p1, p2, p3)
             self._post_set_divider()
-            return value
+            return result
 
 
         def _post_set_divider(self):
@@ -166,7 +178,7 @@ class Si535x(Device):
             bits_18 = ((17, 16), (15, 8), (7, 0))
             bits_20 = ((19, 16), (15, 8), (7, 0))
 
-            bits_ranges = {1: bits_8, 2: [], 3: []} if self._idx in self._si.INTEGER_ONLY_multisynths else \
+            bits_ranges = {1: bits_8, 2: [], 3: []} if self._idx in self.INTEGER_ONLY_MULTISYNTHS else \
                 {1: bits_18, 2: bits_20, 3: bits_20}
 
             for i in range(len(params)):
@@ -182,8 +194,6 @@ class Si535x(Device):
 
         def _validate_abc(self, a, b, c):
             a = int(a)
-            b = int(b)
-            c = int(c)
             _is_even_integer = self._is_abc_even_integer(a, b, c)
             return a, b, c, _is_even_integer
 
@@ -193,9 +203,11 @@ class Si535x(Device):
 
 
     class _Multisynth(_MultisynthBase):
-        DIVIDER_MIN = 8
+        DIVIDER_MIN = 6
         DIVIDER_MAX = 2048
         DIVIDER_DEFAULT = 36
+        DIVIDER_MIN_INTEGER_ONLY_MULTISYNTHS = 6
+        DIVIDER_MAX_INTEGER_ONLY_MULTISYNTHS = 254
 
 
         def __init__(self, si, idx):
@@ -205,11 +217,12 @@ class Si535x(Device):
 
 
         def set_input_source(self, pll_idx = 0):
+            self._si._action = 'multisynth set_input_source {}'.format(pll_idx)
             """
             Each of these dividers can be set to use PLLA or PLLB as its reference by setting MSx_SRC to 0 or 1 respectively.
             See bit 5 description of registers 16-23.
             """
-            valids = range(self._si.N_PLLS)
+            valids = range(len(self._si._PLL.NAMES))
             assert pll_idx in valids, 'valid pll_idx: {}'.format(valids)
 
             self._source = self._si.plls[pll_idx]
@@ -218,43 +231,52 @@ class Si535x(Device):
 
 
         def enable_fanout(self, value = True):
+            self._si._action = 'multisynth enable_fanout {}'.format(value)
             self._si._write_element_by_name('MS_FANOUT_EN', 1 if value else 0)
 
 
         def _validate_abc(self, a, b, c):
             a = int(a)
-            b = int(b)
-            c = int(c)
 
-            if self._idx in self._si.INTEGER_ONLY_multisynths:
+            if self._idx in self.INTEGER_ONLY_MULTISYNTHS:
                 _is_even_integer = a % 2 == 0
                 b = 0
                 c = 1
-
-                assert _is_even_integer and (6 <= a <= 254), \
-                    'Multisynth {} divider validation error: "a" ({}) must be an even integer and  (6 <= a <= 254)'.format(
-                        self._idx, a)
+                assert _is_even_integer and (self.DIVIDER_MIN_INTEGER_ONLY_MULTISYNTHS <= a <=
+                                             self.DIVIDER_MAX_INTEGER_ONLY_MULTISYNTHS), \
+                    'Multisynth {} divider validation error: "a" ({}) must be an even integer and  ({} <= a <= {})'.format(
+                        self._idx, a,
+                        self.DIVIDER_MIN_INTEGER_ONLY_MULTISYNTHS,
+                        self.DIVIDER_MAX_INTEGER_ONLY_MULTISYNTHS)
 
             else:
                 _is_even_integer = self._is_abc_even_integer(a, b, c)
-
-                assert self.DIVIDER_MIN + 1 / self._si.POW_2_DENOMINATOR_BITS <= (a + b / c) <= self.DIVIDER_MAX, \
+                assert self.DIVIDER_MIN + 1 / self.POW_2_DENOMINATOR_BITS <= (a + b / c) <= self.DIVIDER_MAX, \
                     'Must {} + 1 / ((2 ** {}) - 1) <=  ({} + {} / {})  <= {}'.format(self.DIVIDER_MIN,
-                                                                                     self._si.DENOMINATOR_BITS,
+                                                                                     self.DENOMINATOR_BITS,
                                                                                      a, b, c,
                                                                                      self.DIVIDER_MAX)
 
             return a, b, c, _is_even_integer
 
 
+        @property
+        def is_in_integer_mode(self):
+            if self._idx in self.INTEGER_ONLY_MULTISYNTHS:
+                return True
+            if self._idx in range(self.N_HIGH_FREQUENCY_MULTISYNTHS):
+                return self._si.map.elements['MS{}_INT'.format(self._idx)]['element'].value == 1
+            return False
+
+
         def _set_integer_mode(self, value = True):
-            if self._idx not in self._si.INTEGER_ONLY_multisynths:
+            if self._idx not in self.INTEGER_ONLY_MULTISYNTHS:
                 self._si._write_element_by_name('MS{}_INT'.format(self._idx), 1 if value else 0)
 
 
         @property
         def is_divided_by_4(self):
-            if self._idx in range(self._si.N_HIGH_FREQUENCY_multisynths):
+            if self._idx in range(self.N_HIGH_FREQUENCY_MULTISYNTHS):
                 return self._si.map.elements['MS{}_DIVBY4'.format(self._idx)]['element'].value == 0x03
             return False
 
@@ -271,16 +293,22 @@ class Si535x(Device):
             Set the appropriate feedback Multisynth to generate fVCO=Fout*4.
             """
             assert self._idx in range(
-                self._si.N_HIGH_FREQUENCY_multisynths), 'High frequencies only for multisynths 0-5'
+                self.N_HIGH_FREQUENCY_MULTISYNTHS), 'High frequencies only for multisynths 0-5'
             if value:
                 self._set_parameters(p1 = 0, p2 = 0, p3 = 1)
                 self._set_integer_mode(True)
                 self._divider = 4
+
             self._si._write_element_by_name('MS{}_DIVBY4'.format(self._idx), 0x03 if value else 0x00)
             self._post_set_divider()
+            if self.pll:
+                self.pll.reset()  # need to reset PLL after switching mode.
 
 
     class _CLKIN:
+
+        CLKIN_DIVIDERS = {1: 0x00, 2: 0x01, 4: 0x20, 8: 0x03}
+
 
         def __init__(self, si, freq = None):
             self._si = si
@@ -300,38 +328,44 @@ class Si535x(Device):
 
 
         def _set_divider(self):
-            for d in sorted(self._si.CLKIN_DIVIDERS.keys()):
+            for d in sorted(self.CLKIN_DIVIDERS.keys()):
                 if self._freq / d <= 40e6:
                     break
             assert 10e6 <= self._freq / d <= 40e6, 'The input frequency range of the PLLis 10 to 40 MHz'
             self._divider = d
-            self._si._write_element_by_name('CLKIN_DIV', self._si.CLKIN_DIVIDERS[d])
+            self._si._write_element_by_name('CLKIN_DIV', self.CLKIN_DIVIDERS[d])
 
 
         def enable_fanout(self, value = True):
+            self._si._action = 'enable_fanout {}'.format(value)
             self._si._write_element_by_name('CLKIN_FANOUT_EN', 1 if value else 0)
 
 
     class _Xtal:
 
+        CRYSTAL_INTERNAL_LOAD_CAPACITANCEs = {6: 0x01, 8: 0x02, 10: 0x03}
+
+
         def __init__(self, si, freq = None):
             self._si = si
             self.freq = freq
-            self.set_internal_load_capacitance(pF = 8)
+            self.set_internal_load_capacitance(pF = 10)
             self.enable_fanout(True)
 
 
-        def set_internal_load_capacitance(self, pF = 8):
+        def set_internal_load_capacitance(self, pF = 10):
+            self._si._action = 'set_internal_load_capacitance {}'.format(pF)
             """
             If the source for the PLL is a crystal, PLLx_SRC must be set to 0 in register 15. XTAL_CL[1:0] must also be set to
             match the crystal load capacitance (see register 183).
             """
-            valids = self._si.CRYSTAL_INTERNAL_LOAD_CAPACITANCEs.keys()
+            valids = self.CRYSTAL_INTERNAL_LOAD_CAPACITANCEs.keys()
             assert pF in valids, 'valid pF: {}'.format(valids)
-            self._si._write_element_by_name('XTAL_CL', self._si.CRYSTAL_INTERNAL_LOAD_CAPACITANCEs[pF])
+            self._si._write_element_by_name('XTAL_CL', self.CRYSTAL_INTERNAL_LOAD_CAPACITANCEs[pF])
 
 
         def enable_fanout(self, value = True):
+            self._si._action = 'Xtal enable_fanout {}'.format(value)
             self._si._write_element_by_name('XO_FANOUT_EN', 1 if value else 0)
 
 
@@ -341,13 +375,6 @@ class Si535x(Device):
             self._si = si
             self.freq = freq
 
-
-        # def get_freq_vco_xtal(self, freq_xtal, a, b, c):
-        #     return freq_xtal * (a + b / c)
-        #
-        #
-        # def get_freq_vco_clkin(self, freq_clkin, clkin_div, a, b, c):
-        #     return freq_clkin / clkin_div * (a + b / c)
 
         def _set_paramenters(self, apr = 30):
             """
@@ -363,7 +390,7 @@ class Si535x(Device):
 
             VCXO_Param[21:0] =  1.03 * (128a +  b/10**6) * APR
             """
-            pll_divider = self._si.plls[self._si.PLLs.index('B')].divider
+            pll_divider = self._si.plls[self._si._PLL.NAMES.index('B')].divider
             a = int(pll_divider)
             b = (pll_divider - a) * 10 ** 6
             c = 10 ** 6
@@ -379,6 +406,12 @@ class Si535x(Device):
 
 
     class _PLL(_MultisynthBase):
+
+        NAMES = ('A', 'B')
+
+        FREQ_INPUT_MIN = int(10e6)
+        FREQ_INPOUT_MAX = int(40e6)
+
         FREQ_VCO_MIN = int(600e6)
         FREQ_VCO_MAX = int(900e6)
         DIVIDER_MIN = 15
@@ -388,52 +421,56 @@ class Si535x(Device):
 
         def __init__(self, si, idx, xtal_as_source = True):
             super().__init__(si, idx)
-            self._name = 'N{}'.format(self._si.PLLs[self._idx])
+            self._name = 'N{}'.format(self.NAMES[self._idx])
             self._xtal_as_source = xtal_as_source
             self.init()
 
 
         def init(self):
+            self._si._action = 'pll init.'
             # Alrough it has been done in super-class, set_divider() must be done again here, otherwise PLL doesn't work. Don't know why it is so.
-            # set_divider() is a must, the afterward reset() may not be necessary but done anyway.
-            # maybe the reset() is automatically done inside Si5351 whenever divider is set.
             self._set_divider(self.DIVIDER_DEFAULT)
 
             self.set_input_source(xtal_as_source = self._xtal_as_source)
-            self.reset()  # https://groups.io/g/BITX20/topic/si5351a_facts_and_myths/5430607
+            self.reset()  # reset after source set. https://groups.io/g/BITX20/topic/si5351a_facts_and_myths/5430607
 
 
         @property
         def freq(self):
             freq = self.source.freq * self.divider  # using "*", not "/" for PLL
+            assert self.FREQ_VCO_MIN <= freq <= self.FREQ_VCO_MAX, 'Fvco must be between {:0.2e} ~ {:0.2e} Hz.'.format(
+                self.FREQ_VCO_MIN, self.FREQ_VCO_MAX)
             return freq
 
 
         def set_frequency(self, freq):
+            self._si._action = 'pll set frequency {}'.format(freq)
             d = freq / self.source.freq
             a = int(d)
-            b = (d - a) * self._si.POW_2_DENOMINATOR_BITS
-            c = self._si.POW_2_DENOMINATOR_BITS
+            b = (d - a) * self.POW_2_DENOMINATOR_BITS
+            c = self.POW_2_DENOMINATOR_BITS
             self._set_divider(a, b, c)
 
             assert self.FREQ_VCO_MIN <= self.freq <= self.FREQ_VCO_MAX, \
                 'Must {} <= F_vco <= {}, now is {}'.format(self.FREQ_VCO_MIN, self.FREQ_VCO_MAX, self.freq)
 
             self._frequency = freq
-            # self._si.restore_clocks_freqs()  # adjust multisynches for each clocks.
-            return True
+            # self._si.restore_clocks_freqs()  # adjust multisynches for each clocks. but it may be looping.
 
 
         def reset_plls(self):
+            self._si._action = 'reset_plls'
             self._si._write_register_by_name('PLL_Reset', 0xA0)
 
 
         def reset(self):
-            element_name = 'PLL{}_RST'.format(self._si.PLLs[self._idx])
+            self._si._action = 'reset pll {}'.format(self._idx)
+            element_name = 'PLL{}_RST'.format(self.NAMES[self._idx])
             self._si._write_element_by_name(element_name, 1)
 
 
         def set_input_source(self, xtal_as_source = True):
+            self._si._action = 'pll set_input_source xtal_as_source = {}'.format(xtal_as_source)
             """
             If spread spectrum is not enabled, either of the two PLLs may be used as the source for any outputs of the
             Si5351A.
@@ -447,12 +484,21 @@ class Si535x(Device):
             See CLKIN_DIV[1:0], register 15, bits [7:6].
             """
             self._source = self._si.xtal if xtal_as_source else self._si.clkin
+            assert self.FREQ_INPUT_MIN <= self.source.freq <= self.FREQ_INPOUT_MAX, \
+                'Must {} <= F_input <= {}, now is {}'.format(self.FREQ_INPUT_MIN, self.FREQ_INPOUT_MAX,
+                                                             self.source.freq)
+
             self._frequency = math.floor(self.source.freq * self.divider)
 
-            element_name = 'PLL{}_SRC'.format(self._si.PLLs[self._idx])
+            element_name = 'PLL{}_SRC'.format(self.NAMES[self._idx])
             self._si._write_element_by_name(element_name, 0 if xtal_as_source else 1)
             if not xtal_as_source:
                 self._si.clkin._set_divider()
+
+
+        @property
+        def is_in_integer_mode(self):
+            return self._si.map.elements['FB{}_INT'.format(self.NAMES[self._idx])]['element'].value == 1
 
 
         def _set_integer_mode(self, value = True):
@@ -461,22 +507,22 @@ class Si535x(Device):
                FBB_INT respectively. In most cases setting this bit will improve jitter when using even integer divide values.
                Whenever spread spectrum is enabled, FBA_INT must be set to 0.
                """
-            self._si._write_element_by_name('FB{}_INT'.format(self._si.PLLs[self._idx]), 1 if value else 0)
+            self._si._write_element_by_name('FB{}_INT'.format(self.NAMES[self._idx]), 1 if value else 0)
 
 
         def _post_set_divider(self):
-            self.reset()  # https://groups.io/g/BITX20/topic/si5351a_facts_and_myths/5430607
+            # https://www.silabs.com/content/usergenerated/asi/cloud/attachments/siliconlabs/en/community/groups/timing/knowledge-base/jcr:content/content/primary/blog/modifying_the_feedba-K8Pv/311668.pdf
+            # https://groups.io/g/BITX20/topic/si5351a_facts_and_myths/5430607
+            self.reset()
 
 
         def _validate_abc(self, a, b, c):
             a = int(a)
-            b = int(b)
-            c = int(c)
             _is_even_integer = self._is_abc_even_integer(a, b, c)
 
-            assert self.DIVIDER_MIN + 1 / self._si.POW_2_DENOMINATOR_BITS <= (a + b / c) <= self.DIVIDER_MAX, \
+            assert self.DIVIDER_MIN + 1 / self.POW_2_DENOMINATOR_BITS <= (a + b / c) <= self.DIVIDER_MAX, \
                 'Must {} + 1 / ((2 ** {}) - 1) <= (a + b / c) <= {}'.format(self.DIVIDER_MIN,
-                                                                            self._si.DENOMINATOR_BITS,
+                                                                            self.DENOMINATOR_BITS,
                                                                             self.DIVIDER_MAX)
 
             return a, b, c, _is_even_integer
@@ -487,6 +533,11 @@ class Si535x(Device):
         DIVIDER_MIN = 1
         DIVIDER_MAX = 128
         DIVIDER_DEFAULT = 1
+
+        CLOCK_SOURCEs = {'XTAL': 0x00, 'CLKIN': 0x01, 'Group_MultiSynth': 0x2, 'MultiSynth': 0x3}
+        OUTPUT_STRENGTHs = {2: 0x00, 4: 0x01, 6: 0x02, 8: 0x03}
+        DISABLE_STATEs = {'LOW': 0x00, 'HIGH': 0x01, 'HIGH_IMPEDANCE': 0x02, 'NEVER_DISABLED': 0x03}
+        R_DIVIDERs = {1: 0, 2: 1, 4: 2, 8: 3, 16: 4, 32: 5, 64: 6, 128: 7}
 
 
         def __init__(self, si, idx,
@@ -500,17 +551,18 @@ class Si535x(Device):
             self._set_strength(strength_mA)
             self._set_disable_state(disable_state)
             self.set_input_source(source)
-            self.set_frequency(self._si.FREQ_MCLK)
+            self.set_frequency(self._si.FREQ_REF)
 
 
         def set_input_source(self, source = 'MultiSynth'):
+            self._si._action = 'set_input_source {}'.format(source)
             """
             Generally, Multisynth x should be output on CLKx, however XO, CLKIN, or a divided version of either (see section
             4.2.2 on R dividers) may also be output on each of the CLKx pins. Additionally, MS0 (or a divided version of MS0)
             may be output on CLK0-CLK3, and MS4 (or a divided version of MS4) may be output on CLK4-CLK7. See
             CLKx_SRC description for details.
             """
-            valids = self._si.CLOCK_SOURCEs.keys()
+            valids = self.CLOCK_SOURCEs.keys()
             assert source in valids, 'valid sources: {}'.format(valids)
 
             self._source = {'XTAL'            : self._si.xtal,
@@ -519,14 +571,13 @@ class Si535x(Device):
                             'MultiSynth'      : self._si.multisynths[self._idx]}[source]
 
             self._frequency = math.floor(self.source.freq / self.divider)
-            self._si._write_element_by_name('CLK{}_SRC'.format(self._idx), self._si.CLOCK_SOURCEs[source])
+            self._si._write_element_by_name('CLK{}_SRC'.format(self._idx), self.CLOCK_SOURCEs[source])
 
 
         @property
         def multisynth(self):
             if isinstance(self.source, self._si._Multisynth):
                 return self.source
-            return None
 
 
         @property
@@ -534,43 +585,49 @@ class Si535x(Device):
             if self.multisynth:
                 if isinstance(self.multisynth.source, self._si._PLL):
                     return self.multisynth.source
-            return None
 
 
         def set_frequency(self, freq):
+            self._si._action = 'set_frequency {}'.format(freq)
 
             if self.pll is not None:  # source with adjustable frequency
-                if freq * self.multisynth.DIVIDER_MIN * min(self._si.R_DIVIDERs.keys()) > self.pll.FREQ_VCO_MAX:
+                if freq * self.multisynth.DIVIDER_MIN * min(self.R_DIVIDERs.keys()) > self.pll.FREQ_VCO_MAX:
                     # high frequency, need to use 4 as divider and adjust PLL's frequency.
                     self.pll.set_frequency(freq * 4)  # divider is fixed, so the fvco of PLL must be adjusted.
                     self.multisynth._set_divided_by_4(True)
                     self._frequency = freq
-                    self.pll.reset()  # need to reset PLL after switching mode.
                     return True
 
                 else:  # divided by 4 is not necessary
-                    if self.multisynth.is_divided_by_4:
+                    if self.multisynth.is_divided_by_4:  # change mode.
                         self.multisynth._set_divided_by_4(False)
-                        self.pll.reset()  # need to reset PLL after switching mode.
 
                     # if current PLL's frequency needs to be adjusted.
-                    if self.pll.freq / (self.multisynth.DIVIDER_MAX * max(self._si.R_DIVIDERs.keys())) > freq or \
-                            self.pll.freq / (self.multisynth.DIVIDER_MIN * min(self._si.R_DIVIDERs.keys())) < freq:
-                        self.pll.init()
+                    if self.pll.freq / (self.multisynth.DIVIDER_MAX * max(self.R_DIVIDERs.keys())) > freq:
+                        self.pll.set_frequency(self.pll.FREQ_VCO_MIN)
+                    if self.pll.freq / (self.multisynth.DIVIDER_MIN * min(self.R_DIVIDERs.keys())) < freq:
+                        self.pll.set_frequency(self.pll.FREQ_VCO_MAX)
 
-                    for d in self._si.R_DIVIDERs.keys():
+                    # try setting divider and therefore frequency
+                    for d in self.R_DIVIDERs.keys():
                         if math.floor(self.multisynth.freq / d) == math.floor(freq):  # match, do it within R.
                             self._set_divider(d)
                             self._frequency = freq
                             return True
-                        else:
-                            if self.multisynth.set_frequency(freq * d) is True:  # try adjusting multisynth frequency.
-                                self._set_divider(d)  # source can provide the desired freq, adjust R divider again.
-                                self._frequency = freq
-                                return True
+
+                        else:  # need to adjust multisynth frequency.
+                            try:
+                                if self.multisynth.set_frequency(
+                                        freq * d) is True:  # try adjusting multisynth frequency.
+                                    self._set_divider(d)  # source can provide the desired freq, adjust R divider again.
+                                    self._frequency = freq
+                                    return True
+                            except AssertionError as e:
+                                print('Failed in setting multisynth {} to freq {} x {} = {}.'.format(
+                                    self.multisynth._idx, freq, d, freq * d))
 
             else:  # source with fixed frequency
-                for d in self._si.R_DIVIDERs.keys():
+                for d in self.R_DIVIDERs.keys():
                     if math.floor(self.source.freq / d) == math.floor(freq):
                         self._set_divider(d)
                         self._frequency = freq
@@ -585,7 +642,7 @@ class Si535x(Device):
 
 
         def enable(self, value = True):
-            self._si._action = 'enable_output_clock: {}'.format(value)
+            self._si._action = 'enable_output_clock {} {}'.format(self._idx, value)
             self._si._write_element_by_name('CLK{}_OEB'.format(self._idx), 0 if value else 1)
             self.power_down(not value)
 
@@ -596,15 +653,16 @@ class Si535x(Device):
 
 
         def power_down(self, value = True):
+            self._si._action = 'power_down {}'.format(value)
             self._si._write_element_by_name('CLK{}_PDN'.format(self._idx), 1 if value else 0)
             if not value:  # https://groups.io/g/BITX20/topic/si5351a_facts_and_myths/5430607
                 self._maintain_phase_offset()
 
 
         def _set_strength(self, mA = 8):
-            valids = self._si.OUTPUT_STRENGTHs.keys()
+            valids = self.OUTPUT_STRENGTHs.keys()
             assert mA in valids, 'valid mA: {}'.format(valids)
-            self._si._write_element_by_name('CLK{}_IDRV'.format(self._idx), self._si.OUTPUT_STRENGTHs[mA])
+            self._si._write_element_by_name('CLK{}_IDRV'.format(self._idx), self.OUTPUT_STRENGTHs[mA])
 
 
         def _set_invert(self, value = True):
@@ -617,9 +675,9 @@ class Si535x(Device):
 
 
         def _set_disable_state(self, state = 'LOW'):
-            valids = self._si.DISABLE_STATEs.keys()
+            valids = self.DISABLE_STATEs.keys()
             assert state in valids, 'valid states: {}'.format(valids)
-            self._si._write_element_by_name('CLK{}_DIS_STATE'.format(self._idx), self._si.DISABLE_STATEs[state])
+            self._si._write_element_by_name('CLK{}_DIS_STATE'.format(self._idx), self.DISABLE_STATEs[state])
 
 
         def _set_divider(self, divider = 1):
@@ -628,11 +686,11 @@ class Si535x(Device):
             set to 1, 2, 4, 8,....128 by writing the proper setting for Rx_DIV. Set this parameter to generate frequencies down to
             8kHz
             """
-            valids = self._si.R_DIVIDERs.keys()
+            valids = self.R_DIVIDERs.keys()
             assert divider in valids, 'valid divider: {}'.format(valids)
 
             self._divider = divider
-            self._si._write_element_by_name('R{}_DIV'.format(self._idx), self._si.R_DIVIDERs[divider])
+            self._si._write_element_by_name('R{}_DIV'.format(self._idx), self.R_DIVIDERs[divider])
 
 
         def _post_set_divider(self):
@@ -641,22 +699,19 @@ class Si535x(Device):
 
         def _maintain_phase_offset(self):
             if self.phase_offset_enabled:  # https://groups.io/g/BITX20/topic/si5351a_facts_and_myths/5430607
-                self._reset_pll()
-
-
-        def _reset_pll(self):
-            if self.multisynth is not None:
-                self.pll.reset()
+                if self.pll:
+                    self.pll.reset()
 
 
         @property
         def phase_offset_enabled(self):
-            if self._idx in range(self._si.N_multisynths_WITH_OUTPUT_SKEW):
+            if self._idx in range(self.N_MULTISYNTHS_WITH_OUTPUT_SKEW):
                 return self._si.map.elements['CLK{}_PHOFF'.format(self._idx)]['element'].value != 0
             return False
 
 
         def set_phase_offset(self, offset_seconds = 0):
+            self._si._action = 'set_phase_offset {}'.format(offset_seconds)
             """
             Set offset_seconds = 0 to disable it.
 
@@ -672,7 +727,7 @@ class Si535x(Device):
             CLKx_PHOFF[4:0] = Round(DesiredOffset(sec) * 4 * FVCO)
             ==> typo, should be [6:0]
             """
-            if self._idx in range(self._si.N_multisynths_WITH_OUTPUT_SKEW):
+            if self._idx in range(self.N_MULTISYNTHS_WITH_OUTPUT_SKEW):
                 if self.multisynth is not None:
                     freq_vco = self.pll.freq  # PLL
                     self._si.multisynths[self._idx]._set_integer_mode(False)
@@ -698,10 +753,11 @@ class Si535x(Device):
 
         @property
         def pll(self):
-            return self._si.plls[self._si.PLLs.index('A')]
+            return self._si.plls[self._si._PLL.NAMES.index('A')]
 
 
         def enable(self, value = True):
+            self._si._action = 'enable Spread Spectrum {}'.format(value)
             """
             spread spectrum is only supported by PLLA, and the VCXO functionality is only supported by PLLB.
             When using the VCXO function, set the MSNB divide ratio a + b/c such that c = 10**6. This must
@@ -714,11 +770,12 @@ class Si535x(Device):
             SSC_EN register bit must be set to 0.
             """
             if value:
-                self._si.plls[self._si.PLLs.index('A')]._set_integer_mode(False)
+                self._si.plls[self._si._PLL.NAMES.index('A')]._set_integer_mode(False)
             self._si._write_element_by_name('SSC_EN', 1 if value else 0)
 
 
         def enable_ssen_pin(self, value = True):
+            self._si._action = 'enable_ssen_pin {}'.format(value)
             '''
             The Spread Spectrum Enable control pin is available on the Si5351A and B devices. Spread spectrum enable
             functionality is a logical OR of the SSEN pin and SSC_EN register bit, so for the SSEN pin to work properly, the
@@ -730,6 +787,7 @@ class Si535x(Device):
 
 
         def set_down_spread(self, ssc_amp = 0.01):
+            self._si._action = 'set_down_spread ssc_amp {}'.format(ssc_amp)
             """
             For down spread, four spread spectrum parameters need to be written: SSUDP[11:0], SSDN_P1[11:0],
             SSDN_P2[14:0], and SSDN_P3[14:0].
@@ -755,6 +813,7 @@ class Si535x(Device):
 
 
         def set_center_spread(self, ssc_amp = 0.01):
+            self._si._action = 'set_center_spread ssc_amp {}'.format(ssc_amp)
             """
             For center spread, seven spread spectrum parameters need to be written: SSUDP[11:0], SSDN_P1[11:0],
             SSDN_P2[14:0], SSDN_P3[14:0], SSUP_P1[11:0], SSUP_P2[14:0], and SSUP_P3[14:0].
@@ -812,7 +871,7 @@ class Si535x(Device):
     def __init__(self, i2c, i2c_address = I2C_ADDRESS, pin_oeb = None, pin_ssen = None,
                  registers_map = None, registers_values = None,
                  n_channels = N_OUTPUT_CLOCKS,
-                 freq_xtal = FREQ_MCLK, freq_clkin = FREQ_MCLK, freq_vcxo = FREQ_MCLK,
+                 freq_xtal = FREQ_REF, freq_clkin = FREQ_REF, freq_vcxo = FREQ_REF,
                  commands = None):
 
         registers_map = _get_registers_map() if registers_map is None else registers_map
@@ -842,9 +901,9 @@ class Si535x(Device):
         self.xtal = self._Xtal(self, self._freq_xtal)
         self.clkin = self._CLKIN(self, self._freq_clkin)
         self.vcxo = self._VCXO(self, self._freq_vcxo)
-        self.plls = [self._PLL(self, i) for i in range(self.N_PLLS)]
-        self.multisynths = [self._Multisynth(self, i) for i in range(self.N_OUTPUT_CLOCKS)]
-        self.clocks = [self._Clock(self, i) for i in range(self.N_OUTPUT_CLOCKS)]
+        self.plls = [self._PLL(self, i) for i in range(len(self._PLL.NAMES))]
+        self.multisynths = [self._Multisynth(self, i) for i in range(self.n_channels)]
+        self.clocks = [self._Clock(self, i) for i in range(self.n_channels)]
         self.spread_spectrum = self._SpreadSpectrum(self)
 
         # step 4: define inputs and features
@@ -854,7 +913,7 @@ class Si535x(Device):
 
         #         frequency 25/27 MHz
         #         internal load 0/6/8/10 pF
-        # self.xtal.set_crystal_internal_load_capacitance(pF = 8)
+        # self.xtal.set_internal_load_capacitance(pF = 8)
 
         #     Feature
         #         Spread Spectrum Clock Config
@@ -866,24 +925,38 @@ class Si535x(Device):
         # step 5: define output frequencies
         #     Out0
         #         mode enabled/disabled/unused
-
         # self.clocks[0].enable()
+
         #         frequency ??? Hz (ex. 19.2MHz, 2*IN0, OUT5, OUT5 + 5ppb)
+        # self.clocks[0].set_frequency(25e6)
+
         #         feature SSC
+        # self.spread_spectrum.enable(False)
+
         #     Out1
         #     ...
         # step 6: define output skews
         #     Out0
         #         desired skew 6ns  ==> Actual_Skew = 6.127ns,  CLK0_PHOFF = 0x16
+        # self.clocks[0].set_phase_offset(6.127e-9)
+
         #     Out1
         #     ...
         # step 7: define output driver configuration
         #     Out1
         #         format driver_strength 2/4/6/8mA
-        #         disable state stop_low/stop_high/HiZ
+        # self.clocks[0]._set_strength(8)
 
-        self.restore_clocks_freqs()
+        #         disable state stop_low/stop_high/HiZ
+        # self.clocks[0]._set_disable_state('LOW')
+
+        self.plls[0].reset_plls()
         self.start()
+
+
+    def enable_output_channel(self, idx, value = True):
+        self._action = 'enable_output_channel: {} {}'.format(idx, value)
+        self.clocks[idx].enable(value)
 
 
     def enable_output(self, value = True):
@@ -892,12 +965,13 @@ class Si535x(Device):
 
 
     def enable(self, value = True):
-        self._action = 'enable {}'.format(value)
+        self._action = 'enable device {}'.format(value)
         self._power_down_all_outputs(not value)
         self.enable_output(value)
 
 
     def restore_clocks_freqs(self):
+        self._action = 'restore_clocks_freqs'
         for clk in self.clocks:
             try:
                 clk.restore_frequency()
@@ -905,12 +979,7 @@ class Si535x(Device):
                 print(e)
 
 
-    def write_all_registers(self, reset = False):
-        for reg in self.map._registers:
-            self._write_register(reg, reset = reset)
-
-
-    def find_integer_dividers(self, freq_desired, even_only = True, torance_hz = 1, freq_ref = FREQ_MCLK):
+    def find_integer_dividers(self, freq_desired, even_only = True, torance_hz = 1, freq_ref = FREQ_REF):
 
         # hierachy structure
         xtal = self._Xtal(self, freq_ref)
@@ -925,7 +994,7 @@ class Si535x(Device):
         # possible dividers
         divider_plls = range(pll.DIVIDER_MIN, pll.DIVIDER_MAX + 1)
         divider_multisynths = range(multisynth.DIVIDER_MIN, multisynth.DIVIDER_MAX + 1)
-        divider_rs = list(self.R_DIVIDERs.keys())
+        divider_rs = list(self._Clock.R_DIVIDERs.keys())
 
         results = []
 
@@ -940,7 +1009,7 @@ class Si535x(Device):
                         multisynth._divider = dm
                         clock._divider = dr
 
-                        freq_clock = clock.freq
+                        freq_clock = clock.freq  # validate
                         diff = abs(freq_clock - freq_desired)
 
                         if diff < torance_hz:
@@ -1006,53 +1075,3 @@ class Si535x(Device):
         self._show_bus_data(bytes([value]), address = register.address, reading = True)
         self._print_register(register)
         return value
-
-
-
-class Si535x_mini:
-    I2C_ADDRESS = 0x60
-    N_REGISTERS = 188
-    OUTPUT_ENABLE_CONTROL_ADDRESS = 3
-
-
-    def __init__(self, i2c, i2c_address = I2C_ADDRESS, registers_values = None):
-        self._i2c = I2C(i2c, i2c_address)
-        self._i2c_address = i2c_address
-
-        self.enable(False)
-
-        if registers_values is not None:
-            self.write_all_registers(registers_values)
-
-        self.enable(True)
-
-
-    def enable(self, value = True):
-        self.write_register(self.OUTPUT_ENABLE_CONTROL_ADDRESS, 0x00 if value else 0xFF)
-
-
-    def read_register(self, address):
-        return self._i2c.read_byte(address)
-
-
-    def read_all_registers(self):
-        addressed_values = []
-        for address in range(self.N_REGISTERS):
-            try:
-                value = self.read_register(address)
-                addressed_values.append((address, value))
-            except:
-                pass
-        return addressed_values
-
-
-    def write_register(self, address, value):
-        return self._i2c.write_byte(address, value)
-
-
-    def write_all_registers(self, addressed_values):
-        for (address, value) in addressed_values:
-            try:
-                self.write_register(address, value)
-            except:
-                pass

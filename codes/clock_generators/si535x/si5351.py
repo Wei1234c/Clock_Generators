@@ -7,8 +7,3 @@ except Exception as e:
 
 class Si5351(Si535x):
     pass
-
-
-
-class Si5351_mini(Si535x_mini):
-    pass
