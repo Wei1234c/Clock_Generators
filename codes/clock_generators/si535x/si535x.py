@@ -8,9 +8,11 @@ try:
     from ..interfaces import *
     from utilities.adapters.peripherals import I2C
     from .registers_map import _get_registers_map
+    from collections import OrderedDict
 except:
     from interfaces import *
     from peripherals import I2C
+    from collections import OrderedDict
 
 
 
@@ -20,6 +22,7 @@ class Si535x(Device):
 
     FREQ_REF = int(25e6)
     N_OUTPUT_CLOCKS = 8
+    OUTPUT_CLOCKS_IN_USE = [0, 1, 2]
 
 
     class _Interrupts:
@@ -64,6 +67,286 @@ class Si535x(Device):
             self._si._write_element_by_name('{}_STKY'.format(interrupt_name.upper()), 0)
 
 
+    class _CLKIN:
+
+        CLKIN_DIVIDERS = {1: 0x00, 2: 0x01, 4: 0x20, 8: 0x03}
+
+
+        def __init__(self, si, freq = None):
+            self._si = si
+            self._freq = freq
+            self._set_divider()
+            self.enable_fanout(True)
+
+
+        @property
+        def freq(self):
+            return math.floor(self._freq / self.divider)
+
+
+        @property
+        def divider(self):
+            return self._divider
+
+
+        def _set_divider(self):
+            for d in sorted(self.CLKIN_DIVIDERS.keys()):
+                if self._freq / d <= 40e6:
+                    break
+
+                    FREQ_INPUT_MIN = int(10e6)
+                    FREQ_INPOUT_MAX = int(40e6)
+            assert self._si._PLL.FREQ_INPUT_MIN <= self._freq / d <= self._si._PLL.FREQ_INPOUT_MAX, 'The input frequency range of the PLLis should be between {:0.2e} to {:0.2e} Hz'.format(
+                self._si._PLL.FREQ_INPUT_MIN, self._si._PLL.FREQ_INPOUT_MAX)
+            self._divider = d
+            self._si._write_element_by_name('CLKIN_DIV', self.CLKIN_DIVIDERS[d])
+
+
+        def enable_fanout(self, value = True):
+            self._si._action = 'enable_fanout {}'.format(value)
+            self._si._write_element_by_name('CLKIN_FANOUT_EN', 1 if value else 0)
+
+
+    class _Xtal:
+
+        CRYSTAL_INTERNAL_LOAD_CAPACITANCEs = {6: 0x01, 8: 0x02, 10: 0x03}
+
+
+        def __init__(self, si, freq = None):
+            self._si = si
+            self.freq = freq
+            self.set_internal_load_capacitance(pF = 10)
+            self.enable_fanout(True)
+
+
+        def set_internal_load_capacitance(self, pF = 10):
+            self._si._action = 'set_internal_load_capacitance {}'.format(pF)
+            """
+            If the source for the PLL is a crystal, PLLx_SRC must be set to 0 in register 15. XTAL_CL[1:0] must also be set to
+            match the crystal load capacitance (see register 183).
+            """
+            valids = self.CRYSTAL_INTERNAL_LOAD_CAPACITANCEs.keys()
+            assert pF in valids, 'valid pF: {}'.format(valids)
+            self._si._write_element_by_name('XTAL_CL', self.CRYSTAL_INTERNAL_LOAD_CAPACITANCEs[pF])
+
+
+        def enable_fanout(self, value = True):
+            self._si._action = 'Xtal enable_fanout {}'.format(value)
+            self._si._write_element_by_name('XO_FANOUT_EN', 1 if value else 0)
+
+
+    class _VCXO:
+
+        def __init__(self, si, freq = None):
+            self._si = si
+            self.freq = freq
+
+
+        def set_pull_range(self, pull_range_ppm = 30):
+            self._set_parameters(pull_range_ppm)
+
+
+        def _set_parameters(self, apr):
+            """
+            The Si5351B combines free-running clock generation and a VCXO in a single package. The VCXO architecture of
+            the Si5350B eliminates the need for an external pullable crystal. The “pulling” is done at PLLB. Only a standard,
+            low cost, fixed-frequency (25 or 27 MHz) AT-cut crystal is required and is used as the reference source for both
+            PLLA and PLLB.
+            PLLB must be used as the source for any VCXO output clock. Feedback B Multisynth divider ratio must be set
+            such that the denominator, c, in the fractional divider a + b/c is fixed to 10^6. Set VCXO_Param register value
+            according to the equation below. Note that 1.03 is a margining factor to ensure the full desired pull range is
+            achieved. For a desired pull-range of +/– 30 ppm, the value APR in the equation below is 30, for +/– 60 ppm APR
+            is 60, and so on.
+
+            VCXO_Param[21:0] =  1.03 * (128a +  b/10**6) * APR
+            """
+            pll_divider = self._si.plls[self._si._PLL.NAMES.index('B')].divider
+            a = int(pll_divider)
+            b = (pll_divider - a) * 10 ** 6
+            c = 10 ** 6
+            vcxo_p = math.floor(1.03 * (128 * a + b / c) * apr)
+
+            bits_ranges = ((21, 16), (15, 8), (7, 0))
+
+            for bits_range in bits_ranges:
+                element_name = 'VCXO_Param_{}_{}'.format(bits_range[0], bits_range[1])
+                mask = (2 ** (bits_range[0] - bits_range[1] + 1) - 1) << bits_range[1]
+                value = (vcxo_p & mask) >> bits_range[1]
+                self._si._write_element_by_name(element_name, value)
+
+            return vcxo_p
+
+
+    class _SpreadSpectrum:
+        MODES = ('down', 'center')
+
+
+        def __init__(self, si):
+            self._si = si
+            self.enable(False)
+            self._mode = None
+
+
+        @property
+        def status(self):
+            return {'source'     : self.pll,
+                    'source_freq': self.pll.freq,
+                    'enabled'    : self.enabled,
+                    'mode'       : self.mode}
+
+
+        @property
+        def mode(self):
+            return self.MODES[self._si.map.elements['SSC_MODE']['element'].value]
+
+
+        @property
+        def pll(self):
+            return self._si.plls[self._si._PLL.NAMES.index('A')]
+
+
+        @property
+        def source(self):
+            return self.pll
+
+
+        @property
+        def enabled(self):
+            return self._si.map.elements['SSC_EN']['element'].value == 1
+
+
+        def enable(self, value = True, mode = 'center', ssc_amp = 0.01):
+            self._si._action = 'enable Spread Spectrum {}'.format(value)
+            """
+            spread spectrum is only supported by PLLA, and the VCXO functionality is only supported by PLLB.
+            When using the VCXO function, set the MSNB divide ratio a + b/c such that c = 10**6. This must
+            be taken into consideration when configuring a frequency plan.
+
+            Whenever spread spectrum is enabled, FBA_INT must be set to 0.
+
+              The Spread Spectrum Enable control pin is available on the Si5351A and B devices. Spread spectrum enable
+            functionality is a logical OR of the SSEN pin and SSC_EN register bit, so for the SSEN pin to work properly, the
+            SSC_EN register bit must be set to 0.
+            """
+            if value:
+                self.pll._set_integer_mode(False)
+
+                if mode.lower() == 'center':
+                    self._set_center_spread(ssc_amp)
+                else:
+                    self._set_down_spread(ssc_amp)
+
+            self._si._write_element_by_name('SSC_EN', 0)  # need to disable between switching modes.
+            self._si._write_element_by_name('SSC_EN', 1 if value else 0)
+
+            self.pll.reset()
+
+
+        def enable_ssen_pin(self, value = True):
+            self._si._action = 'enable_ssen_pin {}'.format(value)
+            '''
+            The Spread Spectrum Enable control pin is available on the Si5351A and B devices. Spread spectrum enable
+            functionality is a logical OR of the SSEN pin and SSC_EN register bit, so for the SSEN pin to work properly, the
+            SSC_EN register bit must be set to 0.
+            '''
+            if value:
+                self.enable(True)
+                self._si._write_element_by_name('SSC_EN', 0)
+
+
+        def _set_down_spread(self, ssc_amp):
+            self._si._action = 'set_down_spread ssc_amp {}'.format(ssc_amp)
+            """
+            For down spread, four spread spectrum parameters need to be written: SSUDP[11:0], SSDN_P1[11:0],
+            SSDN_P2[14:0], and SSDN_P3[14:0].
+            """
+            freq_pfd = self.pll.source.freq
+
+            ssudp = freq_pfd / (4 * 31500)
+
+            ssdn = 64 * self.pll.divider * ssc_amp / ((1 + ssc_amp) * ssudp)
+            ssdn_p1 = math.floor(ssdn)
+            ssdn_p2 = 32767 * (ssdn - ssdn_p1)
+            ssdn_p3 = 32767
+
+            ssup_p1 = 0
+            ssup_p2 = 0
+            ssup_p3 = 1
+
+            self._set_parameters('UDP', ssudp, 0, 1)
+            self._set_parameters('UP', ssup_p1, ssup_p2, ssup_p3)
+            self._set_parameters('DN', ssdn_p1, ssdn_p2, ssdn_p3)
+
+            self._si._write_element_by_name('SSC_MODE', 0)
+
+            return ssudp, (ssup_p1, ssup_p2, ssup_p3), (ssdn_p1, ssdn_p2, ssdn_p3)
+
+
+        def _set_center_spread(self, ssc_amp):
+            self._si._action = 'set_center_spread ssc_amp {}'.format(ssc_amp)
+            """
+            For center spread, seven spread spectrum parameters need to be written: SSUDP[11:0], SSDN_P1[11:0],
+            SSDN_P2[14:0], SSDN_P3[14:0], SSUP_P1[11:0], SSUP_P2[14:0], and SSUP_P3[14:0].
+            """
+            freq_pfd = self.pll.source.freq
+
+            ssudp = freq_pfd / (4 * 31500)
+
+            ssup = 128 * self.pll.divider * ssc_amp / ((1 - ssc_amp) * ssudp)
+            ssup_p1 = math.floor(ssup)
+            ssup_p2 = 32767 * (ssup - ssup_p1)
+            ssup_p3 = 32767
+
+            ssdn = 128 * self.pll.divider * ssc_amp / ((1 + ssc_amp) * ssudp)
+            ssdn_p1 = math.floor(ssdn)
+            ssdn_p2 = 32767 * (ssdn - ssdn_p1)
+            ssdn_p3 = 32767
+
+            self._set_parameters('UDP', ssudp, 0, 1)
+            self._set_parameters('UP', ssup_p1, ssup_p2, ssup_p3)
+            self._set_parameters('DN', ssdn_p1, ssdn_p2, ssdn_p3)
+
+            self._si._write_element_by_name('SSC_MODE', 1)
+
+            return ssudp, (ssup_p1, ssup_p2, ssup_p3), (ssdn_p1, ssdn_p2, ssdn_p3)
+
+
+        def _set_parameters(self, name, p1, p2, p3):
+            """
+            Spread spectrum can be enabled on any Multisynth output that uses PLLA as its reference. Valid ranges for spread
+            spectrum include –0.1% to –2.5% down spread and up to ± 1.5% center spread. This spread modulation rate is
+            fixed at approximately 31.5 kHz.
+            The following parameters must be known to properly set up spread spectrum:
+            fPFD(A) input frequency to PLLA in Hz (determined in Sec 2 above and referred to in “3.1.2. CMOS Clock
+            Source”). This is also listed in the ClockBuilder Pro generated register map file as “#PFD(MHz)=...”
+            a + b/c PLLA Multisynth ratio (determined in Sec 2 above).
+            sscAMPSpread amplitude (e.g., for down or center spread amplitude of 1%, sscAmp = 0.01).
+            Use the equations below to set up the desired spread spectrum profile.
+            Note: Make sure MSNA is set up in fractional mode when using the spread spectrum feature. See parameter FBA_INT in register 22.
+            """
+            assert name in ('UP', 'DN', 'UDP')
+
+            p1 = math.floor(p1)
+            p2 = math.floor(p2)
+            p3 = math.floor(p3)
+
+            params = (p1, p2, p3)
+            bits_12 = ((11, 8), (7, 0))
+            bits_15 = ((14, 8), (7, 0))
+            bits_ranges = {1: bits_12, 2: [], 3: []} if name == 'UDP' else {1: bits_12, 2: bits_15, 3: bits_15}
+
+            for i in range(len(params)):
+                param_idx = i + 1
+                for bits_range in bits_ranges[param_idx]:
+                    element_name = 'SSUDP' if name == 'UDP' else 'SS{}_P{}'.format(name, param_idx)
+                    element_name = '{}_{}_{}'.format(element_name, bits_range[0], bits_range[1])
+                    mask = (2 ** (bits_range[0] - bits_range[1] + 1) - 1) << bits_range[1]
+                    value = (params[i] & mask) >> bits_range[1]
+                    self._si._write_element_by_name(element_name, value)
+
+            return p1, p2, p3
+
+
     class _MultisynthBase:
         DIVIDER_MIN = None
         DIVIDER_MAX = None
@@ -89,6 +372,15 @@ class Si535x(Device):
 
 
         @property
+        def status(self):
+            return OrderedDict({'source'            : self.source,
+                                'source_freq'       : self.source.freq,
+                                'my_freq'           : self.freq,
+                                'my_divider'        : self.divider,
+                                'is_in_integer_mode': self.is_in_integer_mode})
+
+
+        @property
         def source(self):
             return self._source
 
@@ -96,7 +388,7 @@ class Si535x(Device):
         def set_input_source(self, source):
             self._si._action = 'set_input_source {}'.format(source)
             self._source = source
-            self._frequency = math.floor(self.source.freq / self.divider)
+            self._frequency = self.freq
 
 
         @property
@@ -131,6 +423,11 @@ class Si535x(Device):
             return self._divider
 
 
+        @property
+        def is_in_integer_mode(self):
+            raise NotImplementedError()
+
+
         def _set_divider(self, a, b = 0, c = 1):
             """
              MS6 and MS7 are integer-only dividers. The valid range
@@ -142,21 +439,14 @@ class Si535x(Device):
 
             if _is_even_integer:
                 self._set_integer_mode(True)
-                # p1 = a if self._idx in self.INTEGER_ONLY_MULTISYNTHS else 128 * a + math.floor(128 * b / c) - 512
                 p1 = a if self._idx in self.INTEGER_ONLY_MULTISYNTHS else 128 * a + (128 * b / c) - 512
                 p2 = 0
                 p3 = 1
             else:
                 self._set_integer_mode(False)
-                # p1 = 128 * a + math.floor(128 * b / c) - 512
-                # p2 = 128 * b - c * math.floor(128 * b / c)
                 p1 = 128 * a + (128 * b / c) - 512
                 p2 = 128 * b - c * (128 * b / c)
                 p3 = c
-
-            p1 = math.floor(p1)
-            p2 = math.floor(p2)
-            p3 = math.floor(p3)
 
             result = self._set_parameters(p1, p2, p3)
             self._post_set_divider()
@@ -171,7 +461,12 @@ class Si535x(Device):
             raise NotImplementedError()
 
 
-        def _set_parameters(self, p1, p2 = None, p3 = None):
+        def _set_parameters(self, p1, p2, p3):
+
+            p1 = math.floor(p1)
+            p2 = math.floor(p2)
+            p3 = math.floor(p3)
+
             params = (p1, p2, p3)
 
             bits_8 = ((7, 0),)
@@ -202,6 +497,135 @@ class Si535x(Device):
             return int(a) % 2 == 0 and b == 0 and c > 0
 
 
+    class _PLL(_MultisynthBase):
+
+        NAMES = ('A', 'B')
+
+        FREQ_INPUT_MIN = int(10e6)
+        FREQ_INPOUT_MAX = int(40e6)
+
+        FREQ_VCO_MIN = int(600e6)
+        FREQ_VCO_MAX = int(900e6)
+        DIVIDER_MIN = 15
+        DIVIDER_MAX = 90
+        DIVIDER_DEFAULT = 36
+
+
+        def __init__(self, si, idx, xtal_as_source = True):
+            super().__init__(si, idx)
+            self._name = 'N{}'.format(self.NAMES[self._idx])
+            self._xtal_as_source = xtal_as_source
+            self.init()
+
+
+        def init(self):
+            self._si._action = 'pll init.'
+            # Alrough it has been done in super-class, set_divider() must be done again here, otherwise PLL doesn't work. Don't know why it is so.
+            self._set_divider(self.DIVIDER_DEFAULT)
+
+            self.set_input_source(xtal_as_source = self._xtal_as_source)
+            self.reset()  # reset after source set. https://groups.io/g/BITX20/topic/si5351a_facts_and_myths/5430607
+
+
+        @property
+        def freq(self):
+            freq = self.source.freq * self.divider  # using "*", not "/" for PLL
+            assert self.FREQ_VCO_MIN <= freq <= self.FREQ_VCO_MAX, 'Fvco must be between {:0.2e} ~ {:0.2e} Hz.'.format(
+                self.FREQ_VCO_MIN, self.FREQ_VCO_MAX)
+            return freq
+
+
+        def set_frequency(self, freq):
+            self._si._action = 'pll set frequency {}'.format(freq)
+            d = freq / self.source.freq
+            a = int(d)
+            b = (d - a) * self.POW_2_DENOMINATOR_BITS
+            c = self.POW_2_DENOMINATOR_BITS
+            self._set_divider(a, b, c)
+
+            assert self.FREQ_VCO_MIN <= self.freq <= self.FREQ_VCO_MAX, \
+                'Must {} <= F_vco <= {}, now is {}'.format(self.FREQ_VCO_MIN, self.FREQ_VCO_MAX, self.freq)
+
+            self._frequency = freq
+            # self._si.restore_clocks_freqs()  # adjust multisynches for each clocks. but it may be looping.
+
+
+        def reset_plls(self):
+            self._si._action = 'reset_plls'
+            self._si._write_register_by_name('PLL_Reset', 0xA0)
+
+            self._si.map.registers['PLL_Reset'].reset()
+            # This are self clearing bits. I2C bus NAK if immediate read after reset.
+
+
+        def reset(self):
+            self._si._action = 'reset pll {}'.format(self._idx)
+            element_name = 'PLL{}_RST'.format(self.NAMES[self._idx])
+            self._si._write_element_by_name(element_name, 1)
+
+            self._si.map.elements[element_name]['element'].value = 0
+            # This is a self clearing bit. I2C bus NAK if immediate read after reset.
+
+
+        def set_input_source(self, xtal_as_source = True):
+            self._si._action = 'pll set_input_source xtal_as_source = {}'.format(xtal_as_source)
+            """
+            If spread spectrum is not enabled, either of the two PLLs may be used as the source for any outputs of the
+            Si5351A.
+            If both XTAL and CLKIN input options are used simultaneously (Si5351C only), then one PLL must be
+            reserved for use with CLKIN and one for use with the XTAL.
+            Note: PLLA must be used for any spread spectrum-enabled outputs. PLLB must be used for any VCXO outputs.
+
+            If a PLL needs to be synchronized to a CMOS clock, PLLx_SRC must be 1.
+            The input frequency range of the PLL is 10 to 40 MHz. If CLKIN is > 40 MHz,
+            the CLKIN input divider must be used to bring the PLL input within the 10–40 MHz range.
+            See CLKIN_DIV[1:0], register 15, bits [7:6].
+            """
+            self._source = self._si.xtal if xtal_as_source else self._si.clkin
+            assert self.FREQ_INPUT_MIN <= self.source.freq <= self.FREQ_INPOUT_MAX, \
+                'Must {} <= F_input <= {}, now is {}'.format(self.FREQ_INPUT_MIN, self.FREQ_INPOUT_MAX,
+                                                             self.source.freq)
+
+            self._frequency = self.freq
+
+            element_name = 'PLL{}_SRC'.format(self.NAMES[self._idx])
+            self._si._write_element_by_name(element_name, 0 if xtal_as_source else 1)
+            if not xtal_as_source:
+                self._si.clkin._set_divider()
+
+
+        @property
+        def is_in_integer_mode(self):
+            return self._si.map.elements['FB{}_INT'.format(self.NAMES[self._idx])]['element'].value == 1
+
+
+        def _set_integer_mode(self, value = True):
+            """
+               If a + b/c is an even integer, integer mode may be enabled for PLLA or PLLB by setting parameter FBA_INT or
+               FBB_INT respectively. In most cases setting this bit will improve jitter when using even integer divide values.
+               Whenever spread spectrum is enabled, FBA_INT must be set to 0.
+               """
+            self._si._write_element_by_name('FB{}_INT'.format(self.NAMES[self._idx]), 1 if value else 0)
+
+
+        def _post_set_divider(self):
+            # https://www.silabs.com/content/usergenerated/asi/cloud/attachments/siliconlabs/en/community/groups/timing/knowledge-base/jcr:content/content/primary/blog/modifying_the_feedba-K8Pv/311668.pdf
+            # https://groups.io/g/BITX20/topic/si5351a_facts_and_myths/5430607
+            self.reset()
+
+
+        def _validate_abc(self, a, b, c):
+            a = int(a)
+            _is_even_integer = self._is_abc_even_integer(a, b, c)
+
+            assert self.DIVIDER_MIN + 1 / self.POW_2_DENOMINATOR_BITS <= (a + b / c) <= self.DIVIDER_MAX, \
+                'Must {} + 1 / ((2 ** {}) - 1) <= (a + b / c) <= {}'.format(self.DIVIDER_MIN,
+                                                                            self.DENOMINATOR_BITS,
+                                                                            self.DIVIDER_MAX)
+
+            return a, b, c, _is_even_integer
+
+
     class _Multisynth(_MultisynthBase):
         DIVIDER_MIN = 6
         DIVIDER_MAX = 2048
@@ -216,6 +640,13 @@ class Si535x(Device):
             self.enable_fanout(True)
 
 
+        @property
+        def status(self):
+            status = super().status
+            status.update({'is_divided_by_4': self.is_divided_by_4})
+            return status
+
+
         def set_input_source(self, pll_idx = 0):
             self._si._action = 'multisynth set_input_source {}'.format(pll_idx)
             """
@@ -226,7 +657,7 @@ class Si535x(Device):
             assert pll_idx in valids, 'valid pll_idx: {}'.format(valids)
 
             self._source = self._si.plls[pll_idx]
-            self._frequency = math.floor(self.source.freq / self.divider)
+            self._frequency = self.freq
             self._si._write_element_by_name('MS{}_SRC'.format(self._idx), pll_idx)
 
 
@@ -305,229 +736,6 @@ class Si535x(Device):
                 self.pll.reset()  # need to reset PLL after switching mode.
 
 
-    class _CLKIN:
-
-        CLKIN_DIVIDERS = {1: 0x00, 2: 0x01, 4: 0x20, 8: 0x03}
-
-
-        def __init__(self, si, freq = None):
-            self._si = si
-            self._freq = freq
-            self._set_divider()
-            self.enable_fanout(True)
-
-
-        @property
-        def freq(self):
-            return math.floor(self._freq / self.divider)
-
-
-        @property
-        def divider(self):
-            return self._divider
-
-
-        def _set_divider(self):
-            for d in sorted(self.CLKIN_DIVIDERS.keys()):
-                if self._freq / d <= 40e6:
-                    break
-            assert 10e6 <= self._freq / d <= 40e6, 'The input frequency range of the PLLis 10 to 40 MHz'
-            self._divider = d
-            self._si._write_element_by_name('CLKIN_DIV', self.CLKIN_DIVIDERS[d])
-
-
-        def enable_fanout(self, value = True):
-            self._si._action = 'enable_fanout {}'.format(value)
-            self._si._write_element_by_name('CLKIN_FANOUT_EN', 1 if value else 0)
-
-
-    class _Xtal:
-
-        CRYSTAL_INTERNAL_LOAD_CAPACITANCEs = {6: 0x01, 8: 0x02, 10: 0x03}
-
-
-        def __init__(self, si, freq = None):
-            self._si = si
-            self.freq = freq
-            self.set_internal_load_capacitance(pF = 10)
-            self.enable_fanout(True)
-
-
-        def set_internal_load_capacitance(self, pF = 10):
-            self._si._action = 'set_internal_load_capacitance {}'.format(pF)
-            """
-            If the source for the PLL is a crystal, PLLx_SRC must be set to 0 in register 15. XTAL_CL[1:0] must also be set to
-            match the crystal load capacitance (see register 183).
-            """
-            valids = self.CRYSTAL_INTERNAL_LOAD_CAPACITANCEs.keys()
-            assert pF in valids, 'valid pF: {}'.format(valids)
-            self._si._write_element_by_name('XTAL_CL', self.CRYSTAL_INTERNAL_LOAD_CAPACITANCEs[pF])
-
-
-        def enable_fanout(self, value = True):
-            self._si._action = 'Xtal enable_fanout {}'.format(value)
-            self._si._write_element_by_name('XO_FANOUT_EN', 1 if value else 0)
-
-
-    class _VCXO:
-
-        def __init__(self, si, freq = None):
-            self._si = si
-            self.freq = freq
-
-
-        def _set_paramenters(self, apr = 30):
-            """
-            The Si5351B combines free-running clock generation and a VCXO in a single package. The VCXO architecture of
-            the Si5350B eliminates the need for an external pullable crystal. The “pulling” is done at PLLB. Only a standard,
-            low cost, fixed-frequency (25 or 27 MHz) AT-cut crystal is required and is used as the reference source for both
-            PLLA and PLLB.
-            PLLB must be used as the source for any VCXO output clock. Feedback B Multisynth divider ratio must be set
-            such that the denominator, c, in the fractional divider a + b/c is fixed to 10^6. Set VCXO_Param register value
-            according to the equation below. Note that 1.03 is a margining factor to ensure the full desired pull range is
-            achieved. For a desired pull-range of +/– 30 ppm, the value APR in the equation below is 30, for +/– 60 ppm APR
-            is 60, and so on.
-
-            VCXO_Param[21:0] =  1.03 * (128a +  b/10**6) * APR
-            """
-            pll_divider = self._si.plls[self._si._PLL.NAMES.index('B')].divider
-            a = int(pll_divider)
-            b = (pll_divider - a) * 10 ** 6
-            c = 10 ** 6
-            vcxo_p = 1.03 * (128 * a + b / c) * apr
-
-            bits_ranges = ((21, 16), (15, 8), (7, 0))
-
-            for bits_range in bits_ranges:
-                element_name = 'VCXO_Param_{}_{}'.format(bits_range[0], bits_range[1])
-                mask = (2 ** (bits_range[0] - bits_range[1] + 1) - 1) << bits_range[1]
-                value = (vcxo_p & mask) >> bits_range[1]
-                self._si._write_element_by_name(element_name, value)
-
-
-    class _PLL(_MultisynthBase):
-
-        NAMES = ('A', 'B')
-
-        FREQ_INPUT_MIN = int(10e6)
-        FREQ_INPOUT_MAX = int(40e6)
-
-        FREQ_VCO_MIN = int(600e6)
-        FREQ_VCO_MAX = int(900e6)
-        DIVIDER_MIN = 15
-        DIVIDER_MAX = 90
-        DIVIDER_DEFAULT = 36
-
-
-        def __init__(self, si, idx, xtal_as_source = True):
-            super().__init__(si, idx)
-            self._name = 'N{}'.format(self.NAMES[self._idx])
-            self._xtal_as_source = xtal_as_source
-            self.init()
-
-
-        def init(self):
-            self._si._action = 'pll init.'
-            # Alrough it has been done in super-class, set_divider() must be done again here, otherwise PLL doesn't work. Don't know why it is so.
-            self._set_divider(self.DIVIDER_DEFAULT)
-
-            self.set_input_source(xtal_as_source = self._xtal_as_source)
-            self.reset()  # reset after source set. https://groups.io/g/BITX20/topic/si5351a_facts_and_myths/5430607
-
-
-        @property
-        def freq(self):
-            freq = self.source.freq * self.divider  # using "*", not "/" for PLL
-            assert self.FREQ_VCO_MIN <= freq <= self.FREQ_VCO_MAX, 'Fvco must be between {:0.2e} ~ {:0.2e} Hz.'.format(
-                self.FREQ_VCO_MIN, self.FREQ_VCO_MAX)
-            return freq
-
-
-        def set_frequency(self, freq):
-            self._si._action = 'pll set frequency {}'.format(freq)
-            d = freq / self.source.freq
-            a = int(d)
-            b = (d - a) * self.POW_2_DENOMINATOR_BITS
-            c = self.POW_2_DENOMINATOR_BITS
-            self._set_divider(a, b, c)
-
-            assert self.FREQ_VCO_MIN <= self.freq <= self.FREQ_VCO_MAX, \
-                'Must {} <= F_vco <= {}, now is {}'.format(self.FREQ_VCO_MIN, self.FREQ_VCO_MAX, self.freq)
-
-            self._frequency = freq
-            # self._si.restore_clocks_freqs()  # adjust multisynches for each clocks. but it may be looping.
-
-
-        def reset_plls(self):
-            self._si._action = 'reset_plls'
-            self._si._write_register_by_name('PLL_Reset', 0xA0)
-
-
-        def reset(self):
-            self._si._action = 'reset pll {}'.format(self._idx)
-            element_name = 'PLL{}_RST'.format(self.NAMES[self._idx])
-            self._si._write_element_by_name(element_name, 1)
-
-
-        def set_input_source(self, xtal_as_source = True):
-            self._si._action = 'pll set_input_source xtal_as_source = {}'.format(xtal_as_source)
-            """
-            If spread spectrum is not enabled, either of the two PLLs may be used as the source for any outputs of the
-            Si5351A.
-            If both XTAL and CLKIN input options are used simultaneously (Si5351C only), then one PLL must be
-            reserved for use with CLKIN and one for use with the XTAL.
-            Note: PLLA must be used for any spread spectrum-enabled outputs. PLLB must be used for any VCXO outputs.
-
-            If a PLL needs to be synchronized to a CMOS clock, PLLx_SRC must be 1.
-            The input frequency range of the PLL is 10 to 40 MHz. If CLKIN is > 40 MHz,
-            the CLKIN input divider must be used to bring the PLL input within the 10–40 MHz range.
-            See CLKIN_DIV[1:0], register 15, bits [7:6].
-            """
-            self._source = self._si.xtal if xtal_as_source else self._si.clkin
-            assert self.FREQ_INPUT_MIN <= self.source.freq <= self.FREQ_INPOUT_MAX, \
-                'Must {} <= F_input <= {}, now is {}'.format(self.FREQ_INPUT_MIN, self.FREQ_INPOUT_MAX,
-                                                             self.source.freq)
-
-            self._frequency = math.floor(self.source.freq * self.divider)
-
-            element_name = 'PLL{}_SRC'.format(self.NAMES[self._idx])
-            self._si._write_element_by_name(element_name, 0 if xtal_as_source else 1)
-            if not xtal_as_source:
-                self._si.clkin._set_divider()
-
-
-        @property
-        def is_in_integer_mode(self):
-            return self._si.map.elements['FB{}_INT'.format(self.NAMES[self._idx])]['element'].value == 1
-
-
-        def _set_integer_mode(self, value = True):
-            """
-               If a + b/c is an even integer, integer mode may be enabled for PLLA or PLLB by setting parameter FBA_INT or
-               FBB_INT respectively. In most cases setting this bit will improve jitter when using even integer divide values.
-               Whenever spread spectrum is enabled, FBA_INT must be set to 0.
-               """
-            self._si._write_element_by_name('FB{}_INT'.format(self.NAMES[self._idx]), 1 if value else 0)
-
-
-        def _post_set_divider(self):
-            # https://www.silabs.com/content/usergenerated/asi/cloud/attachments/siliconlabs/en/community/groups/timing/knowledge-base/jcr:content/content/primary/blog/modifying_the_feedba-K8Pv/311668.pdf
-            # https://groups.io/g/BITX20/topic/si5351a_facts_and_myths/5430607
-            self.reset()
-
-
-        def _validate_abc(self, a, b, c):
-            a = int(a)
-            _is_even_integer = self._is_abc_even_integer(a, b, c)
-
-            assert self.DIVIDER_MIN + 1 / self.POW_2_DENOMINATOR_BITS <= (a + b / c) <= self.DIVIDER_MAX, \
-                'Must {} + 1 / ((2 ** {}) - 1) <= (a + b / c) <= {}'.format(self.DIVIDER_MIN,
-                                                                            self.DENOMINATOR_BITS,
-                                                                            self.DIVIDER_MAX)
-
-            return a, b, c, _is_even_integer
-
-
     class _Clock(_MultisynthBase):
 
         DIVIDER_MIN = 1
@@ -554,6 +762,18 @@ class Si535x(Device):
             self.set_frequency(self._si.FREQ_REF)
 
 
+        @property
+        def status(self):
+            status = super().status
+            status.update({'enabled'             : self.enabled,
+                           'oeb_pin_masked'      : self.oeb_pin_masked,
+                           'power_downed'        : self.power_downed,
+                           'phase_offset_enabled': self.phase_offset_enabled,
+                           'multisynth'          : self.multisynth,
+                           'pll'                 : self.pll})
+            return status
+
+
         def set_input_source(self, source = 'MultiSynth'):
             self._si._action = 'set_input_source {}'.format(source)
             """
@@ -570,7 +790,7 @@ class Si535x(Device):
                             'Group_MultiSynth': self._si.multisynths[self._idx // 4],
                             'MultiSynth'      : self._si.multisynths[self._idx]}[source]
 
-            self._frequency = math.floor(self.source.freq / self.divider)
+            self._frequency = self.freq
             self._si._write_element_by_name('CLK{}_SRC'.format(self._idx), self.CLOCK_SOURCEs[source])
 
 
@@ -633,7 +853,7 @@ class Si535x(Device):
                         self._frequency = freq
                         return True
 
-            raise ValueError('Set frequency ({}) error.'.format(freq))
+            raise ValueError('Clock {} failed in setting frequency as {}.'.format(self._idx, freq))
 
 
         @property
@@ -642,9 +862,9 @@ class Si535x(Device):
 
 
         def enable(self, value = True):
-            self._si._action = 'enable_output_clock {} {}'.format(self._idx, value)
-            self._si._write_element_by_name('CLK{}_OEB'.format(self._idx), 0 if value else 1)
-            self.power_down(not value)
+            if not self.power_downed:
+                self._si._action = 'enable_output_clock {} {}'.format(self._idx, value)
+                self._si._write_element_by_name('CLK{}_OEB'.format(self._idx), 0 if value else 1)
 
 
         @property
@@ -654,9 +874,24 @@ class Si535x(Device):
 
         def power_down(self, value = True):
             self._si._action = 'power_down {}'.format(value)
+
+            if value:
+                self.enable(False)
+
             self._si._write_element_by_name('CLK{}_PDN'.format(self._idx), 1 if value else 0)
+
             if not value:  # https://groups.io/g/BITX20/topic/si5351a_facts_and_myths/5430607
                 self._maintain_phase_offset()
+
+
+        @property
+        def oeb_pin_masked(self):
+            return self._si.map.elements['OEB_MASK_{}'.format(self._idx)]['element'].value == 1
+
+
+        @property
+        def is_in_integer_mode(self):
+            return True
 
 
         def _set_strength(self, mA = 8):
@@ -669,9 +904,8 @@ class Si535x(Device):
             self._si._write_element_by_name('CLK{}_INV'.format(self._idx), 1 if value else 0)
 
 
-        def _mask_oeb(self, value = True):
-            self._si._action = 'enable_output_clock_oeb_mask: {}'.format(value)
-            self._si._write_element_by_name('OEB_MASK{}'.format(self._idx), 1 if value else 0)
+        def _mask_oeb_pin(self, value = True):
+            self._si._write_element_by_name('OEB_MASK_{}'.format(self._idx), 1 if value else 0)
 
 
         def _set_disable_state(self, state = 'LOW'):
@@ -744,130 +978,6 @@ class Si535x(Device):
             self._si._write_element_by_name('CLK{}_PHOFF'.format(self._idx), offset & 0x7F)
 
 
-    class _SpreadSpectrum:
-
-        def __init__(self, si):
-            self._si = si
-            self.enable(False)
-
-
-        @property
-        def pll(self):
-            return self._si.plls[self._si._PLL.NAMES.index('A')]
-
-
-        def enable(self, value = True):
-            self._si._action = 'enable Spread Spectrum {}'.format(value)
-            """
-            spread spectrum is only supported by PLLA, and the VCXO functionality is only supported by PLLB.
-            When using the VCXO function, set the MSNB divide ratio a + b/c such that c = 10**6. This must
-            be taken into consideration when configuring a frequency plan.
-
-            Whenever spread spectrum is enabled, FBA_INT must be set to 0.
-
-              The Spread Spectrum Enable control pin is available on the Si5351A and B devices. Spread spectrum enable
-            functionality is a logical OR of the SSEN pin and SSC_EN register bit, so for the SSEN pin to work properly, the
-            SSC_EN register bit must be set to 0.
-            """
-            if value:
-                self._si.plls[self._si._PLL.NAMES.index('A')]._set_integer_mode(False)
-            self._si._write_element_by_name('SSC_EN', 1 if value else 0)
-
-
-        def enable_ssen_pin(self, value = True):
-            self._si._action = 'enable_ssen_pin {}'.format(value)
-            '''
-            The Spread Spectrum Enable control pin is available on the Si5351A and B devices. Spread spectrum enable
-            functionality is a logical OR of the SSEN pin and SSC_EN register bit, so for the SSEN pin to work properly, the
-            SSC_EN register bit must be set to 0.
-            '''
-            if value:
-                self.enable(True)
-                self._si._write_element_by_name('SSC_EN', 0)
-
-
-        def set_down_spread(self, ssc_amp = 0.01):
-            self._si._action = 'set_down_spread ssc_amp {}'.format(ssc_amp)
-            """
-            For down spread, four spread spectrum parameters need to be written: SSUDP[11:0], SSDN_P1[11:0],
-            SSDN_P2[14:0], and SSDN_P3[14:0].
-            """
-            freq_pfd = self.pll.source.freq
-
-            ssudp = math.floor(freq_pfd / (4 * 31500))
-
-            ssdn = 64 * self.pll.divider * ssc_amp / ((1 + ssc_amp) * ssudp)
-            ssdn_p1 = math.floor(ssdn)
-            ssdn_p2 = 32767 * (ssdn - ssdn_p1)
-            ssdn_p3 = 32767
-
-            ssup_p1 = 0,
-            ssup_p2 = 0
-            ssup_p3 = 1
-
-            self._set_parameters('UDP', ssudp)
-            self._set_parameters('UP', ssup_p1, ssup_p2, ssup_p3)
-            self._set_parameters('DN', ssdn_p1, ssdn_p2, ssdn_p3)
-
-            return ssudp, (ssup_p1, ssup_p2, ssup_p3), (ssdn_p1, ssdn_p2, ssdn_p3)
-
-
-        def set_center_spread(self, ssc_amp = 0.01):
-            self._si._action = 'set_center_spread ssc_amp {}'.format(ssc_amp)
-            """
-            For center spread, seven spread spectrum parameters need to be written: SSUDP[11:0], SSDN_P1[11:0],
-            SSDN_P2[14:0], SSDN_P3[14:0], SSUP_P1[11:0], SSUP_P2[14:0], and SSUP_P3[14:0].
-            """
-            freq_pfd = self.pll.source.freq
-
-            ssudp = math.floor(freq_pfd / (4 * 31500))
-
-            ssup = 128 * self.pll.divider * ssc_amp / ((1 - ssc_amp) * ssudp)
-            ssup_p1 = math.floor(ssup)
-            ssup_p2 = 32767 * (ssup - ssup_p1)
-            ssup_p3 = 32767
-
-            ssdn = 128 * self.pll.divider * ssc_amp / ((1 + ssc_amp) * ssudp)
-            ssdn_p1 = math.floor(ssdn)
-            ssdn_p2 = 32767 * (ssdn - ssdn_p1)
-            ssdn_p3 = 32767
-
-            self._set_parameters('UDP', ssudp)
-            self._set_parameters('UP', ssup_p1, ssup_p2, ssup_p3)
-            self._set_parameters('DN', ssdn_p1, ssdn_p2, ssdn_p3)
-
-            return ssudp, (ssup_p1, ssup_p2, ssup_p3), (ssdn_p1, ssdn_p2, ssdn_p3)
-
-
-        def _set_parameters(self, name, p1, p2 = None, p3 = None):
-            """
-            Spread spectrum can be enabled on any Multisynth output that uses PLLA as its reference. Valid ranges for spread
-            spectrum include –0.1% to –2.5% down spread and up to ± 1.5% center spread. This spread modulation rate is
-            fixed at approximately 31.5 kHz.
-            The following parameters must be known to properly set up spread spectrum:
-            fPFD(A) input frequency to PLLA in Hz (determined in Sec 2 above and referred to in “3.1.2. CMOS Clock
-            Source”). This is also listed in the ClockBuilder Pro generated register map file as “#PFD(MHz)=...”
-            a + b/c PLLA Multisynth ratio (determined in Sec 2 above).
-            sscAMPSpread amplitude (e.g., for down or center spread amplitude of 1%, sscAmp = 0.01).
-            Use the equations below to set up the desired spread spectrum profile.
-            Note: Make sure MSNA is set up in fractional mode when using the spread spectrum feature. See parameter FBA_INT in register 22.
-            """
-            assert name in ('UP', 'DN', 'UDP')
-            params = (p1, p2, p3)
-            bits_12 = ((11, 8), (7, 0))
-            bits_15 = ((14, 8), (7, 0))
-            bits_ranges = {1: bits_12, 2: [], 3: []} if name == 'UDP' else {1: bits_12, 2: bits_15, 3: bits_15}
-
-            for i in range(len(params)):
-                param_idx = i + 1
-                element_name = 'SSUDP' if name == 'UDP' else 'SS{}_P{}'.format(name, param_idx)
-                for bits_range in bits_ranges[param_idx]:
-                    element_name = '{}_{}_{}'.format(element_name, bits_range[0], bits_range[1])
-                    mask = (2 ** (bits_range[0] - bits_range[1] + 1) - 1) << bits_range[1]
-                    value = (params[i] & mask) >> bits_range[1]
-                    self._si._write_element_by_name(element_name, value)
-
-
     def __init__(self, i2c, i2c_address = I2C_ADDRESS, pin_oeb = None, pin_ssen = None,
                  registers_map = None, registers_values = None,
                  n_channels = N_OUTPUT_CLOCKS,
@@ -894,7 +1004,6 @@ class Si535x(Device):
 
     def init(self):
         self._action = 'init'
-        self.enable_output(False)
 
         # internal components
         self.interrupts = self._Interrupts(self)
@@ -905,6 +1014,8 @@ class Si535x(Device):
         self.multisynths = [self._Multisynth(self, i) for i in range(self.n_channels)]
         self.clocks = [self._Clock(self, i) for i in range(self.n_channels)]
         self.spread_spectrum = self._SpreadSpectrum(self)
+
+        self._power_down_all_outputs(True)
 
         # step 4: define inputs and features
         #     input mode
@@ -950,24 +1061,29 @@ class Si535x(Device):
         #         disable state stop_low/stop_high/HiZ
         # self.clocks[0]._set_disable_state('LOW')
 
-        self.plls[0].reset_plls()
+        for i in self.OUTPUT_CLOCKS_IN_USE:
+            self.clocks[i].power_down(False)  # Just power up clocks in use.
+
+        self.reset_plls()
         self.start()
+
+
+    def reset_plls(self):
+        self.plls[0].reset_plls()
+
+
+    def enable(self, value = True):
+        self.enable_output(value)
+
+
+    def enable_output(self, value = True):  # enable only
+        self._action = 'enable_output: {}'.format(value)
+        self._enable_all_outputs(value)
 
 
     def enable_output_channel(self, idx, value = True):
         self._action = 'enable_output_channel: {} {}'.format(idx, value)
         self.clocks[idx].enable(value)
-
-
-    def enable_output(self, value = True):
-        self._action = 'enable_output: {}'.format(value)
-        self._enable_all_outputs(value)
-
-
-    def enable(self, value = True):
-        self._action = 'enable device {}'.format(value)
-        self._power_down_all_outputs(not value)
-        self.enable_output(value)
 
 
     def restore_clocks_freqs(self):
@@ -1027,14 +1143,20 @@ class Si535x(Device):
         return common_pll_dividers, freqs_pll_dividers, freqs_matches
 
 
+    def print_registers_values(self):
+        print('registers_values = {}'.format(self.map.addressed_values))
+
+
+    @property
+    def revision(self):
+        if not self.is_virtual_device:
+            return self.status.elements['REVID'].value
+        return 0
+
+
     @property
     def status(self):
         return self._read_register_by_name('Device_Status')
-
-
-    @property
-    def is_virtual_device(self):
-        return self._i2c._i2c is None
 
 
     @property
@@ -1045,16 +1167,15 @@ class Si535x(Device):
 
 
     @property
-    def revision(self):
-        if not self.is_virtual_device:
-            return self.status.elements['REVID'].value
-        return 0
+    def is_virtual_device(self):
+        return self._i2c._i2c is None
 
 
     # =================================================================
 
     def _enable_all_outputs(self, value = True):
-        self._write_register_by_name('Output_Enable_Control', 0x00 if value else 0xFF)
+        for i in range(self.N_OUTPUT_CLOCKS):
+            self.clocks[i].enable(value)
 
 
     def _power_down_all_outputs(self, value = True):

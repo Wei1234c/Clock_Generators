@@ -1,3 +1,10 @@
+try:
+    from utilities.adapters.peripherals import I2C
+except:
+    from peripherals import I2C
+
+
+
 class Si5351_mini:
     I2C_ADDRESS = 0x60
     N_REGISTERS = 188
@@ -5,7 +12,8 @@ class Si5351_mini:
 
 
     def __init__(self, i2c, i2c_address = I2C_ADDRESS, registers_values = None):
-        self._i2c = i2c
+
+        self._i2c = I2C(i2c, i2c_address)
         self._i2c_address = i2c_address
 
         self.enable(False)
@@ -54,9 +62,9 @@ class Si5351_mini:
 
 
     # =============================
-    def _read_byte(self, address):
-        return self._i2c.readfrom_mem(self._i2c_address, address, 1)[0]
+    def _read_byte(self, reg_address):
+        return self._i2c.read_byte(reg_address)
 
 
-    def _write_byte(self, address, value):
-        return self._i2c.writeto_mem(self._i2c_address, address, bytearray([value]))
+    def _write_byte(self, reg_address, value):
+        return self._i2c._write_byte(reg_address, value)
