@@ -1,5 +1,7 @@
 from clock_generators.si535x.si5351 import Si5351
 from utilities.adapters import peripherals
+from pprint import pprint
+
 
 registers_values = [(0, 0), (1, 0), (2, 0), (3, 0), (9, 0), (15, 0), (16, 79), (17, 79), (18, 79), (19, 79), (20, 79),
                     (21, 79), (22, 79), (23, 79), (24, 0), (25, 0), (26, 0), (27, 1), (28, 0), (29, 16), (30, 0),
@@ -43,4 +45,6 @@ pll = si.plls[0]
 # clk.set_frequency(5.2e6)
 print(clk.freq)
 # print(clk.status)
-print(si.clocks[7].status)
+
+for o in (ss, pll, ms, clk):
+    print(o.status)

@@ -18,18 +18,18 @@ except:
 
 class Si535x(Device):
     I2C_ADDRESS = 0x60
-    READ_ONLY_REGISTERS = [0]
+    READ_ONLY_REGISTERS = (0,)
 
     FREQ_REF = int(25e6)
     N_OUTPUT_CLOCKS = 8
-    OUTPUT_CLOCKS_IN_USE = [0, 1, 2]
+    OUTPUT_CLOCKS_IN_USE = (0, 1, 2)
 
 
     class _Interrupts:
 
-        def __init__(self, si):
+        def __init__(self, si, masks = 0x00):
             self._si = si
-            self.set_masks(0x00)
+            self.set_masks(masks)
             self.clear_stickys()
 
 
@@ -38,15 +38,17 @@ class Si535x(Device):
             return self._si._read_register_by_name('Interrupt_Status_Mask')
 
 
-        def set_masks(self, mask = 0x00):
-            self._si._action = 'set_masks {}'.format(mask)
-            self._si._write_register_by_name('Interrupt_Status_Mask', mask)
+        def set_masks(self, masks = 0x00):
+            self._si._action = 'set_masks {}'.format(masks)
+            self._si._write_register_by_name('Interrupt_Status_Mask', masks)
 
 
         def set_mask(self, interrupt_name, value = True):
             self._si._action = 'set_mask {} {}'.format(interrupt_name, value)
+
             valids = self._si.map.registers['Interrupt_Status_Mask'].elements.keys()
             assert interrupt_name in valids, 'valid names: {}'.format(valids)
+
             self._si._write_element_by_name('{}_MASK'.format(interrupt_name.upper()), 1 if value else 0)
 
 
@@ -62,8 +64,10 @@ class Si535x(Device):
 
         def clear_sticky(self, interrupt_name):
             self._si._action = 'clear_sticky {}'.format(interrupt_name)
+
             valids = self._si.map.registers['Interrupt_Status_Sticky'].elements.keys()
             assert interrupt_name in valids, 'valid names: {}'.format(valids)
+
             self._si._write_element_by_name('{}_STKY'.format(interrupt_name.upper()), 0)
 
 
@@ -94,10 +98,9 @@ class Si535x(Device):
                 if self._freq / d <= 40e6:
                     break
 
-                    FREQ_INPUT_MIN = int(10e6)
-                    FREQ_INPOUT_MAX = int(40e6)
             assert self._si._PLL.FREQ_INPUT_MIN <= self._freq / d <= self._si._PLL.FREQ_INPOUT_MAX, 'The input frequency range of the PLLis should be between {:0.2e} to {:0.2e} Hz'.format(
                 self._si._PLL.FREQ_INPUT_MIN, self._si._PLL.FREQ_INPOUT_MAX)
+
             self._divider = d
             self._si._write_element_by_name('CLKIN_DIV', self.CLKIN_DIVIDERS[d])
 
@@ -112,10 +115,10 @@ class Si535x(Device):
         CRYSTAL_INTERNAL_LOAD_CAPACITANCEs = {6: 0x01, 8: 0x02, 10: 0x03}
 
 
-        def __init__(self, si, freq = None):
+        def __init__(self, si, freq = None, pF = 10):
             self._si = si
             self.freq = freq
-            self.set_internal_load_capacitance(pF = 10)
+            self.set_internal_load_capacitance(pF = pF)
             self.enable_fanout(True)
 
 
@@ -127,6 +130,7 @@ class Si535x(Device):
             """
             valids = self.CRYSTAL_INTERNAL_LOAD_CAPACITANCEs.keys()
             assert pF in valids, 'valid pF: {}'.format(valids)
+
             self._si._write_element_by_name('XTAL_CL', self.CRYSTAL_INTERNAL_LOAD_CAPACITANCEs[pF])
 
 
@@ -184,15 +188,13 @@ class Si535x(Device):
         def __init__(self, si):
             self._si = si
             self.enable(False)
-            self._mode = None
 
 
         @property
         def status(self):
-            return {'source'     : self.pll,
-                    'source_freq': self.pll.freq,
-                    'enabled'    : self.enabled,
-                    'mode'       : self.mode}
+            return OrderedDict({'source_freq': self.pll.freq,
+                                'enabled'    : self.enabled,
+                                'mode'       : self.mode})
 
 
         @property
@@ -228,6 +230,9 @@ class Si535x(Device):
             functionality is a logical OR of the SSEN pin and SSC_EN register bit, so for the SSEN pin to work properly, the
             SSC_EN register bit must be set to 0.
             """
+            valids = self.MODES
+            assert mode in valids, 'valid mode: {}'.format(valids)
+
             if value:
                 self.pll._set_integer_mode(False)
 
@@ -236,7 +241,7 @@ class Si535x(Device):
                 else:
                     self._set_down_spread(ssc_amp)
 
-            self._si._write_element_by_name('SSC_EN', 0)  # need to disable between switching modes.
+            self._si._write_element_by_name('SSC_EN', 0)  # need to disable between switched modes.
             self._si._write_element_by_name('SSC_EN', 1 if value else 0)
 
             self.pll.reset()
@@ -324,7 +329,8 @@ class Si535x(Device):
             Use the equations below to set up the desired spread spectrum profile.
             Note: Make sure MSNA is set up in fractional mode when using the spread spectrum feature. See parameter FBA_INT in register 22.
             """
-            assert name in ('UP', 'DN', 'UDP')
+            valids = ('UP', 'DN', 'UDP')
+            assert name in valids, 'valid name: {}'.format(valids)
 
             p1 = math.floor(p1)
             p2 = math.floor(p2)
@@ -373,8 +379,7 @@ class Si535x(Device):
 
         @property
         def status(self):
-            return OrderedDict({'source'            : self.source,
-                                'source_freq'       : self.source.freq,
+            return OrderedDict({'source_freq'       : self.source.freq,
                                 'my_freq'           : self.freq,
                                 'my_divider'        : self.divider,
                                 'is_in_integer_mode': self.is_in_integer_mode})
@@ -529,9 +534,11 @@ class Si535x(Device):
 
         @property
         def freq(self):
-            freq = self.source.freq * self.divider  # using "*", not "/" for PLL
+            freq = math.floor(self.source.freq * self.divider)  # using "*", not "/" for PLL
+
             assert self.FREQ_VCO_MIN <= freq <= self.FREQ_VCO_MAX, 'Fvco must be between {:0.2e} ~ {:0.2e} Hz.'.format(
                 self.FREQ_VCO_MIN, self.FREQ_VCO_MAX)
+
             return freq
 
 
@@ -548,14 +555,6 @@ class Si535x(Device):
 
             self._frequency = freq
             # self._si.restore_clocks_freqs()  # adjust multisynches for each clocks. but it may be looping.
-
-
-        def reset_plls(self):
-            self._si._action = 'reset_plls'
-            self._si._write_register_by_name('PLL_Reset', 0xA0)
-
-            self._si.map.registers['PLL_Reset'].reset()
-            # This are self clearing bits. I2C bus NAK if immediate read after reset.
 
 
         def reset(self):
@@ -582,10 +581,10 @@ class Si535x(Device):
             See CLKIN_DIV[1:0], register 15, bits [7:6].
             """
             self._source = self._si.xtal if xtal_as_source else self._si.clkin
+
             assert self.FREQ_INPUT_MIN <= self.source.freq <= self.FREQ_INPOUT_MAX, \
                 'Must {} <= F_input <= {}, now is {}'.format(self.FREQ_INPUT_MIN, self.FREQ_INPOUT_MAX,
                                                              self.source.freq)
-
             self._frequency = self.freq
 
             element_name = 'PLL{}_SRC'.format(self.NAMES[self._idx])
@@ -622,7 +621,6 @@ class Si535x(Device):
                 'Must {} + 1 / ((2 ** {}) - 1) <= (a + b / c) <= {}'.format(self.DIVIDER_MIN,
                                                                             self.DENOMINATOR_BITS,
                                                                             self.DIVIDER_MAX)
-
             return a, b, c, _is_even_integer
 
 
@@ -634,9 +632,9 @@ class Si535x(Device):
         DIVIDER_MAX_INTEGER_ONLY_MULTISYNTHS = 254
 
 
-        def __init__(self, si, idx):
+        def __init__(self, si, idx, pll_idx = 0):
             super().__init__(si, idx)
-            self.set_input_source(pll_idx = 0)
+            self.set_input_source(pll_idx = pll_idx)
             self.enable_fanout(True)
 
 
@@ -673,21 +671,21 @@ class Si535x(Device):
                 _is_even_integer = a % 2 == 0
                 b = 0
                 c = 1
+
                 assert _is_even_integer and (self.DIVIDER_MIN_INTEGER_ONLY_MULTISYNTHS <= a <=
                                              self.DIVIDER_MAX_INTEGER_ONLY_MULTISYNTHS), \
                     'Multisynth {} divider validation error: "a" ({}) must be an even integer and  ({} <= a <= {})'.format(
                         self._idx, a,
                         self.DIVIDER_MIN_INTEGER_ONLY_MULTISYNTHS,
                         self.DIVIDER_MAX_INTEGER_ONLY_MULTISYNTHS)
-
             else:
                 _is_even_integer = self._is_abc_even_integer(a, b, c)
+
                 assert self.DIVIDER_MIN + 1 / self.POW_2_DENOMINATOR_BITS <= (a + b / c) <= self.DIVIDER_MAX, \
                     'Must {} + 1 / ((2 ** {}) - 1) <=  ({} + {} / {})  <= {}'.format(self.DIVIDER_MIN,
                                                                                      self.DENOMINATOR_BITS,
                                                                                      a, b, c,
                                                                                      self.DIVIDER_MAX)
-
             return a, b, c, _is_even_integer
 
 
@@ -725,6 +723,7 @@ class Si535x(Device):
             """
             assert self._idx in range(
                 self.N_HIGH_FREQUENCY_MULTISYNTHS), 'High frequencies only for multisynths 0-5'
+
             if value:
                 self._set_parameters(p1 = 0, p2 = 0, p3 = 1)
                 self._set_integer_mode(True)
@@ -749,6 +748,7 @@ class Si535x(Device):
 
 
         def __init__(self, si, idx,
+                     freq = None,
                      enable = False,
                      source = 'MultiSynth',
                      strength_mA = 8,
@@ -759,7 +759,7 @@ class Si535x(Device):
             self._set_strength(strength_mA)
             self._set_disable_state(disable_state)
             self.set_input_source(source)
-            self.set_frequency(self._si.FREQ_REF)
+            self.set_frequency(self._si.FREQ_REF if freq is None else freq)
 
 
         @property
@@ -768,9 +768,7 @@ class Si535x(Device):
             status.update({'enabled'             : self.enabled,
                            'oeb_pin_masked'      : self.oeb_pin_masked,
                            'power_downed'        : self.power_downed,
-                           'phase_offset_enabled': self.phase_offset_enabled,
-                           'multisynth'          : self.multisynth,
-                           'pll'                 : self.pll})
+                           'phase_offset_enabled': self.phase_offset_enabled,})
             return status
 
 
@@ -862,7 +860,7 @@ class Si535x(Device):
 
 
         def enable(self, value = True):
-            if not self.power_downed:
+            if not self.power_downed:  # can't enable/disable if power downed.
                 self._si._action = 'enable_output_clock {} {}'.format(self._idx, value)
                 self._si._write_element_by_name('CLK{}_OEB'.format(self._idx), 0 if value else 1)
 
@@ -876,7 +874,7 @@ class Si535x(Device):
             self._si._action = 'power_down {}'.format(value)
 
             if value:
-                self.enable(False)
+                self.enable(False)  # disable before power down.
 
             self._si._write_element_by_name('CLK{}_PDN'.format(self._idx), 1 if value else 0)
 
@@ -897,6 +895,7 @@ class Si535x(Device):
         def _set_strength(self, mA = 8):
             valids = self.OUTPUT_STRENGTHs.keys()
             assert mA in valids, 'valid mA: {}'.format(valids)
+
             self._si._write_element_by_name('CLK{}_IDRV'.format(self._idx), self.OUTPUT_STRENGTHs[mA])
 
 
@@ -911,6 +910,7 @@ class Si535x(Device):
         def _set_disable_state(self, state = 'LOW'):
             valids = self.DISABLE_STATEs.keys()
             assert state in valids, 'valid states: {}'.format(valids)
+
             self._si._write_element_by_name('CLK{}_DIS_STATE'.format(self._idx), self.DISABLE_STATEs[state])
 
 
@@ -979,9 +979,9 @@ class Si535x(Device):
 
 
     def __init__(self, i2c, i2c_address = I2C_ADDRESS, pin_oeb = None, pin_ssen = None,
-                 registers_map = None, registers_values = None,
-                 n_channels = N_OUTPUT_CLOCKS,
+                 n_channels = N_OUTPUT_CLOCKS, channels_in_use = OUTPUT_CLOCKS_IN_USE,
                  freq_xtal = FREQ_REF, freq_clkin = FREQ_REF, freq_vcxo = FREQ_REF,
+                 registers_map = None, registers_values = None,
                  commands = None):
 
         registers_map = _get_registers_map() if registers_map is None else registers_map
@@ -991,9 +991,10 @@ class Si535x(Device):
                          commands = commands)
 
         self._i2c = I2C(i2c, i2c_address)
-        self._i2c_address = i2c_address
         self._pin_oeb = pin_oeb
         self._pin_ssen = pin_ssen
+
+        self.channels_in_use = channels_in_use
 
         self._freq_xtal = freq_xtal
         self._freq_clkin = freq_clkin
@@ -1061,7 +1062,7 @@ class Si535x(Device):
         #         disable state stop_low/stop_high/HiZ
         # self.clocks[0]._set_disable_state('LOW')
 
-        for i in self.OUTPUT_CLOCKS_IN_USE:
+        for i in self.channels_in_use:
             self.clocks[i].power_down(False)  # Just power up clocks in use.
 
         self.reset_plls()
@@ -1069,7 +1070,11 @@ class Si535x(Device):
 
 
     def reset_plls(self):
-        self.plls[0].reset_plls()
+        self._action = 'reset_plls'
+        self._write_register_by_name('PLL_Reset', 0xA0)
+
+        self.map.registers['PLL_Reset'].reset()
+        # Synch. This are self clearing bits. I2C bus NAK if immediate read after reset.
 
 
     def enable(self, value = True):
