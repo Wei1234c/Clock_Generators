@@ -23,15 +23,16 @@ else:
     _i2c = None  # using None for testing without actual hardware device.
 
 si = Si5351(_i2c)
-si.print_registers_values()
+# si.print_registers_values()
+# si.enable(False)
 
-xtal = si.xtal
 clkin = si.clkin
-vcxo = si.vcxo
-ss = si.spread_spectrum
-clk = si.clocks[0]
-ms = si.multisynths[0]
+xtal = si.xtal
+# vcxo = si.vcxo
 pll = si.plls[0]
+ms = si.multisynths[0]
+clk = si.clocks[0]
+ss = si.spread_spectrum
 
 # clkin._set_divider()
 # vcxo.set_pull_range(60)
@@ -43,8 +44,27 @@ pll = si.plls[0]
 # clk.set_frequency(90e6)
 # clk.set_frequency(225e6)
 # clk.set_frequency(5.2e6)
+clk.set_frequency(2289)
+
 print(clk.freq)
 # print(clk.status)
 
-for o in (ss, pll, ms, clk):
-    print(o.status)
+si.restore_clocks_freqs(can_tune_pll = False)
+
+# for o in (clkin, xtal, vcxo, pll,  ss):
+#     print(o.status)
+
+# for i in (0, 7):
+#     print(si.multisynths[i].status)
+#     print(si.clocks[i].status)
+#     print()
+
+
+print(si.multisynths[1].status)
+print(si.clocks[1].status)
+
+# print(si.multisynths[5].status)
+# print(si.clocks[5].status)
+
+# # si.clocks[7].restore_frequency()
+# print(si.clocks[7].status)
