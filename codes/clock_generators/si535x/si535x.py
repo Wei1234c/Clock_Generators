@@ -16,7 +16,7 @@ except:
 
 
 
-def value_after_masked(value, idx_msb, idx_lsb):
+def _section(value, idx_msb, idx_lsb):
     mask = (2 ** (idx_msb - idx_lsb + 1) - 1) << idx_lsb
     return (value & mask) >> idx_lsb
 
@@ -200,11 +200,7 @@ class Si535x(Device):
 
         def _set_parameters(self, p1, p2, p3):
 
-            p1 = math.floor(p1)
-            p2 = math.floor(p2)
-            p3 = math.floor(p3)
-
-            params = (p1, p2, p3)
+            params = [math.floor(p) for p in (p1, p2, p3)]
 
             bits_8 = ((7, 0),)
             bits_18 = ((17, 16), (15, 8), (7, 0))
@@ -218,7 +214,7 @@ class Si535x(Device):
                 for bits_range in bits_ranges[param_idx]:
                     idx_msb, idx_lsb = bits_range
                     element_name = 'MS{}_P{}_{}_{}'.format(self._name, param_idx, idx_msb, idx_lsb)
-                    self._si._write_element_by_name(element_name, value_after_masked(params[i], idx_msb, idx_lsb))
+                    self._si._write_element_by_name(element_name, _section(params[i], idx_msb, idx_lsb))
 
             return True
 
@@ -715,7 +711,7 @@ class Si535x(Device):
         CLKIN_DIVIDERS = {1: 0x00, 2: 0x01, 4: 0x20, 8: 0x03}
 
 
-        def __init__(self, si, freq = None):
+        def __init__(self, si, freq):
             self.set_frequency(freq)
             super().__init__(si, idx = 0)
             self.set_input_source()
@@ -796,7 +792,7 @@ class Si535x(Device):
         CRYSTAL_INTERNAL_LOAD_CAPACITANCEs = {6: 0x01, 8: 0x02, 10: 0x03}
 
 
-        def __init__(self, si, freq = None, pF = 10):
+        def __init__(self, si, freq, pF = 10):
             super().__init__(si, freq = freq)
             self.set_internal_load_capacitance(pF = pF)
 
@@ -827,8 +823,8 @@ class Si535x(Device):
         DENOMINATOR_MAX = 10 ** 6
 
 
-        def __init__(self, si, freq = None):
-            super().__init__(si, freq = freq)
+        def __init__(self, si):
+            super().__init__(si, None)
 
 
         @property
@@ -884,7 +880,7 @@ class Si535x(Device):
             for bits_range in bits_ranges:
                 idx_msb, idx_lsb = bits_range
                 element_name = 'VCXO_Param_{}_{}'.format(idx_msb, idx_lsb)
-                self._si._write_element_by_name(element_name, value_after_masked(vcxo_p, idx_msb, idx_lsb))
+                self._si._write_element_by_name(element_name, _section(vcxo_p, idx_msb, idx_lsb))
 
             return vcxo_p
 
@@ -896,10 +892,13 @@ class Si535x(Device):
     class _SpreadSpectrum:
         MODES = ('down', 'center')
 
+        DENOMINATOR_BITS = 15
+        DENOMINATOR_MAX = 2 ** DENOMINATOR_BITS - 1
 
-        def __init__(self, si):
+
+        def __init__(self, si, enable = False):
             self._si = si
-            self.enable(False)
+            self.enable(enable)
 
 
         @property
@@ -989,8 +988,8 @@ class Si535x(Device):
 
             ssdn = 64 * self.pll.divider * ssc_amp / ((1 + ssc_amp) * ssudp)
             ssdn_p1 = math.floor(ssdn)
-            ssdn_p2 = 32767 * (ssdn - ssdn_p1)
-            ssdn_p3 = 32767
+            ssdn_p2 = self.DENOMINATOR_MAX * (ssdn - ssdn_p1)
+            ssdn_p3 = self.DENOMINATOR_MAX
 
             ssup_p1 = 0
             ssup_p2 = 0
@@ -1017,13 +1016,13 @@ class Si535x(Device):
 
             ssup = 128 * self.pll.divider * ssc_amp / ((1 - ssc_amp) * ssudp)
             ssup_p1 = math.floor(ssup)
-            ssup_p2 = 32767 * (ssup - ssup_p1)
-            ssup_p3 = 32767
+            ssup_p2 = (ssup - ssup_p1) * self.DENOMINATOR_MAX
+            ssup_p3 = self.DENOMINATOR_MAX
 
             ssdn = 128 * self.pll.divider * ssc_amp / ((1 + ssc_amp) * ssudp)
             ssdn_p1 = math.floor(ssdn)
-            ssdn_p2 = 32767 * (ssdn - ssdn_p1)
-            ssdn_p3 = 32767
+            ssdn_p2 = (ssdn - ssdn_p1) * self.DENOMINATOR_MAX
+            ssdn_p3 = self.DENOMINATOR_MAX
 
             self._set_parameters('UDP', ssudp, 0, 1)
             self._set_parameters('UP', ssup_p1, ssup_p2, ssup_p3)
@@ -1050,11 +1049,7 @@ class Si535x(Device):
             valids = ('UP', 'DN', 'UDP')
             assert name in valids, 'valid name: {}'.format(valids)
 
-            p1 = math.floor(p1)
-            p2 = math.floor(p2)
-            p3 = math.floor(p3)
-
-            params = (p1, p2, p3)
+            params = [math.floor(p) for p in (p1, p2, p3)]
 
             bits_12 = ((11, 8), (7, 0))
             bits_15 = ((14, 8), (7, 0))
@@ -1066,7 +1061,7 @@ class Si535x(Device):
                     idx_msb, idx_lsb = bits_range
                     element_name = 'SSUDP' if name == 'UDP' else 'SS{}_P{}'.format(name, param_idx)
                     element_name = '{}_{}_{}'.format(element_name, idx_msb, idx_lsb)
-                    self._si._write_element_by_name(element_name, value_after_masked(params[i], idx_msb, idx_lsb))
+                    self._si._write_element_by_name(element_name, _section(params[i], idx_msb, idx_lsb))
 
             return p1, p2, p3
 
@@ -1108,7 +1103,7 @@ class Si535x(Device):
         self.clocks = [self._Clock(self, i) for i in range(self.n_channels)]
         self.spread_spectrum = self._SpreadSpectrum(self)  # PLL_A as source
         if self.HAS_VCXO:
-            self.vcxo = self._VCXO(self, self._freq_vcxo)  # PLL_B as source, changes PLL_B's denominator(P3) if used.
+            self.vcxo = self._VCXO(self)  # PLL_B as source, changes PLL_B's denominator(P3) if used.
 
         self._power_down_all_outputs(True)
 
