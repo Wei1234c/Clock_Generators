@@ -304,12 +304,14 @@ class Si535x(Device):
                 'Must {} <= F_input <= {}, now is {}'.format(self.FREQ_INPUT_MIN, self.FREQ_INPOUT_MAX,
                                                              self.source.freq)
 
-            self._frequency = self.freq  # validate FREQ_VCO_MIN <= freq <= FREQ_VCO_MAX
-
             element_name = 'PLL{}_SRC'.format(self.NAMES[self._idx])
             self._si._write_element_by_name(element_name, 0 if xtal_as_source else 1)
+
             if not xtal_as_source:
                 self._si.clkin._set_divider()
+
+            self._frequency = self.freq  # validate FREQ_VCO_MIN <= freq <= FREQ_VCO_MAX
+
 
 
         @property
@@ -439,9 +441,10 @@ class Si535x(Device):
                 self._set_parameters(p1 = 0, p2 = 0, p3 = self.denominator_max)
                 self._set_integer_mode(True)
                 self._divider = 4
-
             self._si._write_element_by_name('MS{}_DIVBY4'.format(self._idx), 0x03 if value else 0x00)
+
             self._post_set_divider()
+
             if self.pll:
                 self.pll.reset()  # need to reset PLL after switching mode.
 
