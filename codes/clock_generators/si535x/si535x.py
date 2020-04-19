@@ -5,18 +5,18 @@
 
 
 try:
+    from collections import OrderedDict
     from ..interfaces import *
     from utilities.adapters.peripherals import I2C
     from .registers_map import _get_registers_map
-    from collections import OrderedDict
 except:
+    from collections import OrderedDict
     from interfaces import *
     from peripherals import I2C
-    from collections import OrderedDict
 
 
 
-def _section(value, idx_msb, idx_lsb):
+def _section_value(value, idx_msb, idx_lsb):
     mask = (2 ** (idx_msb - idx_lsb + 1) - 1) << idx_lsb
     return (value & mask) >> idx_lsb
 
@@ -139,10 +139,7 @@ class Si535x(Device):
         def set_frequency(self, freq):
             self._si._action = 'set_frequency {}'.format(freq)
             d = self.source.freq / freq
-            a = int(d)
-            b = (d - a)
-            c = 1
-            self._set_divider(a, b, c)
+            self._set_divider(d)
             self._frequency = freq
             return True
 
@@ -162,17 +159,14 @@ class Si535x(Device):
             raise NotImplementedError()
 
 
-        def _set_divider(self, a, b = 0, c = 1):
+        def _set_divider(self, divider):
             """
              MS6 and MS7 are integer-only dividers. The valid range
             of values for these dividers is all even integers between 6 and 254 inclusive.
             For MS6 and MS7, set MSx_P1 directly (e.g., MSx_P1=divide value).
             """
-            b = b / c * self.denominator_max
-            c = self.denominator_max  # vcxo and pll use different denominators to fill up P3 register value,
-
-            a, b, c, _is_even_integer = self._validate_abc(a, b, c)
-            self._divider = a + b / c
+            a, b, c, _is_even_integer = self._validate_divider(divider)
+            self._divider = divider
 
             if _is_even_integer:
                 self._set_integer_mode(True)
@@ -214,19 +208,23 @@ class Si535x(Device):
                 for bits_range in bits_ranges[param_idx]:
                     idx_msb, idx_lsb = bits_range
                     element_name = 'MS{}_P{}_{}_{}'.format(self._name, param_idx, idx_msb, idx_lsb)
-                    self._si._write_element_by_name(element_name, _section(params[i], idx_msb, idx_lsb))
+                    self._si._write_element_by_name(element_name, _section_value(params[i], idx_msb, idx_lsb))
 
             return True
 
 
-        def _validate_abc(self, a, b, c):
-            a = int(a)
-            _is_even_integer = self._is_abc_even_integer(a, b, c)
+        def _validate_divider(self, divider):
+            a = int(divider)
+            b = self.denominator_max * (divider - a)
+            c = self.denominator_max  # vcxo and pll use different denominators to fill up P3 register value,
+
+            _is_even_integer = self._is_even_integer(divider)
             return a, b, c, _is_even_integer
 
 
-        def _is_abc_even_integer(self, a, b, c):
-            return int(a) % 2 == 0 and b == 0 and c > 0
+        def _is_even_integer(self, divider):
+            d = math.floor(divider)
+            return d == divider and d % 2 == 0
 
 
     class _PLL(_MultisynthBase):
@@ -252,9 +250,7 @@ class Si535x(Device):
 
         def init(self):
             self._si._action = 'pll init.'
-            # Alrough it has been done in super-class, set_divider() must be done again here, otherwise PLL doesn't work. Don't know why it is so.
             self._set_divider(self.DIVIDER_DEFAULT)
-
             self.set_input_source(xtal_as_source = self._xtal_as_source)
             self.reset()  # reset after source set. https://groups.io/g/BITX20/topic/si5351a_facts_and_myths/5430607
 
@@ -272,20 +268,15 @@ class Si535x(Device):
         def set_frequency(self, freq):
             self._si._action = 'pll set frequency {}'.format(freq)
             d = freq / self.source.freq
-            a = int(d)
-            b = (d - a) * self.DENOMINATOR_MAX
-            c = self.DENOMINATOR_MAX
-            self._set_divider(a, b, c)
-
-            assert self.FREQ_VCO_MIN <= self.freq <= self.FREQ_VCO_MAX, \
-                'Must {} <= F_vco <= {}, now is {}'.format(self.FREQ_VCO_MIN, self.FREQ_VCO_MAX, self.freq)
-
-            self._frequency = freq
+            self._set_divider(d)
+            self._frequency = self.freq  # validate FREQ_VCO_MIN <= freq <= FREQ_VCO_MAX
             # self._si.restore_clocks_freqs()  # adjust multisynches for each clocks. but it may be looping.
+            return True
 
 
         def reset(self):
             self._si._action = 'reset pll {}'.format(self._idx)
+
             element_name = 'PLL{}_RST'.format(self.NAMES[self._idx])
             self._si._write_element_by_name(element_name, 1)
 
@@ -312,7 +303,8 @@ class Si535x(Device):
             assert self.FREQ_INPUT_MIN <= self.source.freq <= self.FREQ_INPOUT_MAX, \
                 'Must {} <= F_input <= {}, now is {}'.format(self.FREQ_INPUT_MIN, self.FREQ_INPOUT_MAX,
                                                              self.source.freq)
-            self._frequency = self.freq
+
+            self._frequency = self.freq  # validate FREQ_VCO_MIN <= freq <= FREQ_VCO_MAX
 
             element_name = 'PLL{}_SRC'.format(self.NAMES[self._idx])
             self._si._write_element_by_name(element_name, 0 if xtal_as_source else 1)
@@ -340,15 +332,12 @@ class Si535x(Device):
             self.reset()
 
 
-        def _validate_abc(self, a, b, c):
-            a = int(a)
-            _is_even_integer = self._is_abc_even_integer(a, b, c)
-
-            assert self.DIVIDER_MIN + 1 / self.DENOMINATOR_MAX <= (a + b / c) <= self.DIVIDER_MAX, \
-                'Must {} + 1 / ((2 ** {}) - 1) <= (a + b / c) <= {}'.format(self.DIVIDER_MIN,
-                                                                            self.DENOMINATOR_BITS,
-                                                                            self.DIVIDER_MAX)
-            return a, b, c, _is_even_integer
+        def _validate_divider(self, divider):
+            assert self.DIVIDER_MIN + 1 / self.DENOMINATOR_MAX <= divider <= self.DIVIDER_MAX, \
+                'Must {} + 1 / ((2 ** {}) - 1) <= divider <= {}'.format(self.DIVIDER_MIN,
+                                                                        self.DENOMINATOR_BITS,
+                                                                        self.DIVIDER_MAX)
+            return super()._validate_divider(divider)
 
 
     class _Multisynth(_MultisynthBase):
@@ -392,23 +381,22 @@ class Si535x(Device):
             self._si._write_element_by_name('MS_FANOUT_EN', 1 if value else 0)
 
 
-        def _validate_abc(self, a, b, c):
-            a = int(a)
-            _is_even_integer = self._is_abc_even_integer(a, b, c)
+        def _validate_divider(self, divider):
+            a, b, c, _is_even_integer = super()._validate_divider(divider)
 
             if self._idx in self.INTEGER_ONLY_MULTISYNTHS:
-                assert _is_even_integer and (self.DIVIDER_MIN_INTEGER_ONLY_MULTISYNTHS <= a <=
+                assert _is_even_integer and (self.DIVIDER_MIN_INTEGER_ONLY_MULTISYNTHS <= divider <=
                                              self.DIVIDER_MAX_INTEGER_ONLY_MULTISYNTHS), \
                     'Multisynth {} divider validation error: "a + b/c" ({:0.4f}) must be an even integer and  ({} <= a <= {})'.format(
-                        self._idx, a + b / c,
+                        self._idx, divider,
                         self.DIVIDER_MIN_INTEGER_ONLY_MULTISYNTHS,
                         self.DIVIDER_MAX_INTEGER_ONLY_MULTISYNTHS)
             else:
-                assert self.DIVIDER_MIN + 1 / self.DENOMINATOR_MAX <= (a + b / c) <= self.DIVIDER_MAX, \
-                    'Must {} + 1 / ((2 ** {}) - 1) <=  ({} + {} / {})  <= {}'.format(self.DIVIDER_MIN,
-                                                                                     self.DENOMINATOR_BITS,
-                                                                                     a, b, c,
-                                                                                     self.DIVIDER_MAX)
+                assert self.DIVIDER_MIN + 1 / self.DENOMINATOR_MAX <= divider <= self.DIVIDER_MAX, \
+                    'Must {} + 1 / ((2 ** {}) - 1) <=  ({})  <= {}'.format(self.DIVIDER_MIN,
+                                                                           self.DENOMINATOR_BITS,
+                                                                           divider,
+                                                                           self.DIVIDER_MAX)
             return a, b, c, _is_even_integer
 
 
@@ -448,7 +436,7 @@ class Si535x(Device):
                 self.N_HIGH_FREQUENCY_MULTISYNTHS), 'High frequencies only for multisynths 0-5'
 
             if value:
-                self._set_parameters(p1 = 0, p2 = 0, p3 = 1)
+                self._set_parameters(p1 = 0, p2 = 0, p3 = self.denominator_max)
                 self._set_integer_mode(True)
                 self._divider = 4
 
@@ -775,11 +763,11 @@ class Si535x(Device):
             raise NotImplementedError()
 
 
-        def _validate_abc(self, a, b, c):
+        def _validate_divider(self, divider):
             raise NotImplementedError()
 
 
-        def _is_abc_even_integer(self, a, b, c):
+        def _is_even_integer(self, divider):
             raise NotImplementedError()
 
 
@@ -851,11 +839,11 @@ class Si535x(Device):
             pass
 
 
-        def set_pull_range(self, pull_range_ppm = 30):
-            self._set_parameters(pull_range_ppm)
+        def set_pull_range(self, apr_ppm = 30):
+            self._set_parameters(apr_ppm)
 
 
-        def _set_parameters(self, apr):
+        def _set_parameters(self, apr_ppm):
             """
             The Si5351B combines free-running clock generation and a VCXO in a single package. The VCXO architecture of
             the Si5350B eliminates the need for an external pullable crystal. The “pulling” is done at PLLB. Only a standard,
@@ -871,16 +859,16 @@ class Si535x(Device):
             """
             pll_divider = self.pll.divider
             a = int(pll_divider)
-            b = (pll_divider - a) * self.DENOMINATOR_MAX
+            b = self.DENOMINATOR_MAX * (pll_divider - a)
             c = self.DENOMINATOR_MAX
-            vcxo_p = math.floor(1.03 * (128 * a + b / c) * apr)
+            vcxo_p = math.floor(1.03 * (128 * a + b / c) * apr_ppm)
 
             bits_ranges = ((21, 16), (15, 8), (7, 0))
 
             for bits_range in bits_ranges:
                 idx_msb, idx_lsb = bits_range
                 element_name = 'VCXO_Param_{}_{}'.format(idx_msb, idx_lsb)
-                self._si._write_element_by_name(element_name, _section(vcxo_p, idx_msb, idx_lsb))
+                self._si._write_element_by_name(element_name, _section_value(vcxo_p, idx_msb, idx_lsb))
 
             return vcxo_p
 
@@ -993,7 +981,7 @@ class Si535x(Device):
 
             ssup_p1 = 0
             ssup_p2 = 0
-            ssup_p3 = 1
+            ssup_p3 = self.DENOMINATOR_MAX
 
             self._set_parameters('UDP', ssudp, 0, 1)
             self._set_parameters('UP', ssup_p1, ssup_p2, ssup_p3)
@@ -1016,12 +1004,12 @@ class Si535x(Device):
 
             ssup = 128 * self.pll.divider * ssc_amp / ((1 - ssc_amp) * ssudp)
             ssup_p1 = math.floor(ssup)
-            ssup_p2 = (ssup - ssup_p1) * self.DENOMINATOR_MAX
+            ssup_p2 = self.DENOMINATOR_MAX * (ssup - ssup_p1)
             ssup_p3 = self.DENOMINATOR_MAX
 
             ssdn = 128 * self.pll.divider * ssc_amp / ((1 + ssc_amp) * ssudp)
             ssdn_p1 = math.floor(ssdn)
-            ssdn_p2 = (ssdn - ssdn_p1) * self.DENOMINATOR_MAX
+            ssdn_p2 = self.DENOMINATOR_MAX * (ssdn - ssdn_p1)
             ssdn_p3 = self.DENOMINATOR_MAX
 
             self._set_parameters('UDP', ssudp, 0, 1)
@@ -1061,7 +1049,7 @@ class Si535x(Device):
                     idx_msb, idx_lsb = bits_range
                     element_name = 'SSUDP' if name == 'UDP' else 'SS{}_P{}'.format(name, param_idx)
                     element_name = '{}_{}_{}'.format(element_name, idx_msb, idx_lsb)
-                    self._si._write_element_by_name(element_name, _section(params[i], idx_msb, idx_lsb))
+                    self._si._write_element_by_name(element_name, _section_value(params[i], idx_msb, idx_lsb))
 
             return p1, p2, p3
 

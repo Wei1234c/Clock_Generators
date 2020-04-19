@@ -15,7 +15,7 @@ registers_values = [(0, 0), (1, 0), (2, 0), (3, 0), (9, 0), (15, 0), (16, 79), (
                     (162, 0), (163, 0), (164, 0), (165, 0), (166, 0), (167, 0), (168, 0), (169, 0), (170, 0),
                     (177, 160), (183, 210), (187, 208)]
 
-with_hardware_device = False
+with_hardware_device = True
 
 if with_hardware_device:
     _i2c = peripherals.I2C.get_Ftdi_i2c()
@@ -34,19 +34,29 @@ ms = si.multisynths[0]
 clk = si.clocks[0]
 ss = si.spread_spectrum
 
+ss.enable(True, mode = 'center')
+ss.enable(True, mode = 'down')
+# print()
+
 # clkin._set_divider()
 # vcxo.set_pull_range(60)
 
 # si.init()
+si._power_down_all_outputs()
+clk.power_down(False)
+clk.enable()
 # si.enable(False)
 # clk.enable(True)
-# clk.set_frequency(50.4e6)
+clk.set_frequency(50.4e6)
 # clk.set_frequency(90e6)
-# clk.set_frequency(225e6)
+# # si.init()
+# print()
+clk.set_frequency(225e6)
 # clk.set_frequency(5.2e6)
-clk.set_frequency(2289)
+# clk.set_frequency(2289)
 
 print(clk.freq)
+
 # print(clk.status)
 
 si.restore_clocks_freqs(can_tune_pll = False)
