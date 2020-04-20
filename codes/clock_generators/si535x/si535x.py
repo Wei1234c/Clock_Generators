@@ -22,6 +22,11 @@ def _section_value(value, idx_msb, idx_lsb):
 
 
 
+def _value_key(dictionary):
+    return {v: k for k, v in dictionary.items()}
+
+
+
 class Si535x(Device):
     I2C_ADDRESS = 0x60
     READ_ONLY_REGISTERS = (0,)
@@ -160,27 +165,23 @@ class Si535x(Device):
 
 
         def _set_divider(self, divider):
-            """
-             MS6 and MS7 are integer-only dividers. The valid range
-            of values for these dividers is all even integers between 6 and 254 inclusive.
-            For MS6 and MS7, set MSx_P1 directly (e.g., MSx_P1=divide value).
-            """
+            # MS6 and MS7 are integer-only dividers. The valid range
+            # of values for these dividers is all even integers between 6 and 254 inclusive.
+            # For MS6 and MS7, set MSx_P1 directly (e.g., MSx_P1=divide value).
+
             a, b, c, _is_even_integer = self._validate_divider(divider)
-            self._divider = divider
 
-            if _is_even_integer:
-                self._set_integer_mode(True)
-                p1 = a if self._idx in self.INTEGER_ONLY_MULTISYNTHS else 128 * a + (128 * b / c) - 512
-                p2 = 0
-                p3 = c
-            else:
-                self._set_integer_mode(False)
-                p1 = 128 * a + (128 * b / c) - 512
-                p2 = 128 * b - c * (128 * b / c)
-                p3 = c
+            p1 = 128 * a + math.floor(128 * b / c) - 512
+            p2 = 128 * b - c * math.floor(128 * b / c)
+            p3 = c
 
+            if self._idx in self.INTEGER_ONLY_MULTISYNTHS:
+                p1 = a
+
+            self._set_integer_mode(_is_even_integer)
             result = self._set_parameters(p1, p2, p3)
             self._post_set_divider()
+            self._divider = divider
             return result
 
 
@@ -194,7 +195,7 @@ class Si535x(Device):
 
         def _set_parameters(self, p1, p2, p3):
 
-            params = [math.floor(p) for p in (p1, p2, p3)]
+            params = (p1, p2, p3)
 
             bits_8 = ((7, 0),)
             bits_18 = ((17, 16), (15, 8), (7, 0))
@@ -214,8 +215,8 @@ class Si535x(Device):
 
 
         def _validate_divider(self, divider):
-            a = int(divider)
-            b = self.denominator_max * (divider - a)
+            a = math.floor(divider)
+            b = math.floor(self.denominator_max * (divider - a))
             c = self.denominator_max  # vcxo and pll use different denominators to fill up P3 register value,
 
             _is_even_integer = self._is_even_integer(divider)
@@ -232,10 +233,11 @@ class Si535x(Device):
         NAMES = ('A', 'B')
 
         FREQ_INPUT_MIN = int(10e6)
-        FREQ_INPOUT_MAX = int(40e6)
+        FREQ_INPUT_MAX = int(40e6)
 
         FREQ_VCO_MIN = int(600e6)
         FREQ_VCO_MAX = int(900e6)
+
         DIVIDER_MIN = 15
         DIVIDER_MAX = 90
         DIVIDER_DEFAULT = 36
@@ -286,22 +288,22 @@ class Si535x(Device):
 
         def set_input_source(self, xtal_as_source = True):
             self._si._action = 'pll set_input_source xtal_as_source = {}'.format(xtal_as_source)
-            """
-            If spread spectrum is not enabled, either of the two PLLs may be used as the source for any outputs of the
-            Si5351A.
-            If both XTAL and CLKIN input options are used simultaneously (Si5351C only), then one PLL must be
-            reserved for use with CLKIN and one for use with the XTAL.
-            Note: PLLA must be used for any spread spectrum-enabled outputs. PLLB must be used for any VCXO outputs.
 
-            If a PLL needs to be synchronized to a CMOS clock, PLLx_SRC must be 1.
-            The input frequency range of the PLL is 10 to 40 MHz. If CLKIN is > 40 MHz,
-            the CLKIN input divider must be used to bring the PLL input within the 10–40 MHz range.
-            See CLKIN_DIV[1:0], register 15, bits [7:6].
-            """
+            # If spread spectrum is not enabled, either of the two PLLs may be used as the source for any outputs of the
+            # Si5351A.
+            # If both XTAL and CLKIN input options are used simultaneously (Si5351C only), then one PLL must be
+            # reserved for use with CLKIN and one for use with the XTAL.
+            # Note: PLLA must be used for any spread spectrum-enabled outputs. PLLB must be used for any VCXO outputs.
+            # 
+            # If a PLL needs to be synchronized to a CMOS clock, PLLx_SRC must be 1.
+            # The input frequency range of the PLL is 10 to 40 MHz. If CLKIN is > 40 MHz,
+            # the CLKIN input divider must be used to bring the PLL input within the 10–40 MHz range.
+            # See CLKIN_DIV[1:0], register 15, bits [7:6].
+
             self._source = self._si.xtal if xtal_as_source else self._si.clkin
 
-            assert self.FREQ_INPUT_MIN <= self.source.freq <= self.FREQ_INPOUT_MAX, \
-                'Must {} <= F_input <= {}, now is {}'.format(self.FREQ_INPUT_MIN, self.FREQ_INPOUT_MAX,
+            assert self.FREQ_INPUT_MIN <= self.source.freq <= self.FREQ_INPUT_MAX, \
+                'Must {} <= F_input <= {}, now is {}'.format(self.FREQ_INPUT_MIN, self.FREQ_INPUT_MAX,
                                                              self.source.freq)
 
             element_name = 'PLL{}_SRC'.format(self.NAMES[self._idx])
@@ -313,18 +315,16 @@ class Si535x(Device):
             self._frequency = self.freq  # validate FREQ_VCO_MIN <= freq <= FREQ_VCO_MAX
 
 
-
         @property
         def is_in_integer_mode(self):
             return self._si.map.elements['FB{}_INT'.format(self.NAMES[self._idx])]['element'].value == 1
 
 
         def _set_integer_mode(self, value = True):
-            """
-               If a + b/c is an even integer, integer mode may be enabled for PLLA or PLLB by setting parameter FBA_INT or
-               FBB_INT respectively. In most cases setting this bit will improve jitter when using even integer divide values.
-               Whenever spread spectrum is enabled, FBA_INT must be set to 0.
-               """
+            # If a + b/c is an even integer, integer mode may be enabled for PLLA or PLLB by setting parameter FBA_INT or
+            # FBB_INT respectively. In most cases setting this bit will improve jitter when using even integer divide values.
+            # Whenever spread spectrum is enabled, FBA_INT must be set to 0.
+
             self._si._write_element_by_name('FB{}_INT'.format(self.NAMES[self._idx]), 1 if value else 0)
 
 
@@ -366,10 +366,10 @@ class Si535x(Device):
 
         def set_input_source(self, pll_idx = 0):
             self._si._action = 'multisynth set_input_source {}'.format(pll_idx)
-            """
-            Each of these dividers can be set to use PLLA or PLLB as its reference by setting MSx_SRC to 0 or 1 respectively.
-            See bit 5 description of registers 16-23.
-            """
+
+            # Each of these dividers can be set to use PLLA or PLLB as its reference by setting MSx_SRC to 0 or 1 respectively.
+            # See bit 5 description of registers 16-23.
+
             valids = range(len(self._si._PLL.NAMES))
             assert pll_idx in valids, 'valid pll_idx: {}'.format(valids)
 
@@ -424,16 +424,16 @@ class Si535x(Device):
 
 
         def _set_divided_by_4(self, value = True):
-            """
-            Output frequencies greater than 150 MHz are available on Multisynths 0-5. For this frequency range a divide value
-            of 4 must be used by setting
-            MSx_P1=0,
-            MSx_P2=0,
-            MSx_P3=1,
-            MSx_INT=1, and
-            MSx_DIVBY4[1:0]=11b.
-            Set the appropriate feedback Multisynth to generate fVCO=Fout*4.
-            """
+
+            # Output frequencies greater than 150 MHz are available on Multisynths 0-5. For this frequency range a divide value
+            # of 4 must be used by setting
+            # MSx_P1=0,
+            # MSx_P2=0,
+            # MSx_P3=1,
+            # MSx_INT=1, and
+            # MSx_DIVBY4[1:0]=11b.
+            # Set the appropriate feedback Multisynth to generate fVCO=Fout*4.
+
             assert self._idx in range(
                 self.N_HIGH_FREQUENCY_MULTISYNTHS), 'High frequencies only for multisynths 0-5'
 
@@ -488,12 +488,12 @@ class Si535x(Device):
 
         def set_input_source(self, source = 'MultiSynth'):
             self._si._action = 'set_input_source {}'.format(source)
-            """
-            Generally, Multisynth x should be output on CLKx, however XO, CLKIN, or a divided version of either (see section
-            4.2.2 on R dividers) may also be output on each of the CLKx pins. Additionally, MS0 (or a divided version of MS0)
-            may be output on CLK0-CLK3, and MS4 (or a divided version of MS4) may be output on CLK4-CLK7. See
-            CLKx_SRC description for details.
-            """
+
+            # Generally, Multisynth x should be output on CLKx, however XO, CLKIN, or a divided version of either (see section
+            # 4.2.2 on R dividers) may also be output on each of the CLKx pins. Additionally, MS0 (or a divided version of MS0)
+            # may be output on CLK0-CLK3, and MS4 (or a divided version of MS4) may be output on CLK4-CLK7. See
+            # CLKx_SRC description for details.
+
             valids = self.CLOCK_SOURCEs.keys()
             assert source in valids, 'valid sources: {}'.format(valids)
 
@@ -634,11 +634,11 @@ class Si535x(Device):
 
 
         def _set_divider(self, divider = 1):
-            """
-            The R dividers can be used to generate frequencies below about 500 kHz. Each individual output R divider can be
-            set to 1, 2, 4, 8,....128 by writing the proper setting for Rx_DIV. Set this parameter to generate frequencies down to
-            8kHz
-            """
+
+            # The R dividers can be used to generate frequencies below about 500 kHz. Each individual output R divider can be
+            # set to 1, 2, 4, 8,....128 by writing the proper setting for Rx_DIV. Set this parameter to generate frequencies down to
+            # 8kHz
+
             valids = self.R_DIVIDERs.keys()
             assert divider in valids, 'valid divider: {}'.format(valids)
 
@@ -665,35 +665,35 @@ class Si535x(Device):
 
         def set_phase_offset(self, offset_seconds = 0):
             self._si._action = 'set_phase_offset {}'.format(offset_seconds)
-            """
-            Set offset_seconds = 0 to disable it.
 
-            It's important to note that Multisynth integer mode cannot be used when adding phase offsets in NVM. In
-            other words, MSx_INT needs to be set to 0 if phase offsets need to be enabled.
+            # Set offset_seconds = 0 to disable it.
+            # 
+            # It's important to note that Multisynth integer mode cannot be used when adding phase offsets in NVM. In
+            # other words, MSx_INT needs to be set to 0 if phase offsets need to be enabled.
+            # 
+            #   Outputs 0-5 of the Si5351 can be programmed with an independent initial phase offset. The phase offset only
+            # works when MS0-5 are set as fractional dividers (divider values greater than 8). The phase offset parameter is an
+            # unsigned integer where each LSB represents a phase difference of a quarter of the VCO period, TVCO/4. Use the
+            # equation below to determine the register value. Also, remember that any divider using the phase offset feature
+            # needs the MSx_INT bit set to 0.
+            # 
+            # CLKx_PHOFF[4:0] = Round(DesiredOffset(sec) * 4 * FVCO)
+            # ==> typo, should be [6:0]
 
-              Outputs 0-5 of the Si5351 can be programmed with an independent initial phase offset. The phase offset only
-            works when MS0-5 are set as fractional dividers (divider values greater than 8). The phase offset parameter is an
-            unsigned integer where each LSB represents a phase difference of a quarter of the VCO period, TVCO/4. Use the
-            equation below to determine the register value. Also, remember that any divider using the phase offset feature
-            needs the MSx_INT bit set to 0.
-
-            CLKx_PHOFF[4:0] = Round(DesiredOffset(sec) * 4 * FVCO)
-            ==> typo, should be [6:0]
-            """
             if self._idx in range(self.N_MULTISYNTHS_WITH_OUTPUT_SKEW):
                 if self.multisynth is not None:
-                    freq_vco = self.pll.freq  # PLL
                     self._si.multisynths[self._idx]._set_integer_mode(False)
 
+                    freq_vco = self.pll.freq  # PLL
                     offset = round(offset_seconds * 4 * freq_vco)
                     self._set_phase_offset(offset)
 
 
         def _set_phase_offset(self, offset = 0):
-            """
-            CLKx_PHOFF[6:0] is an unsigned integer with one LSB equivalent to a time delay of
-            Tvco/4, where Tvco is the period of the VCO/PLL associated with this output.
-            """
+
+            # CLKx_PHOFF[6:0] is an unsigned integer with one LSB equivalent to a time delay of
+            # Tvco/4, where Tvco is the period of the VCO/PLL associated with this output.
+
             self._si._write_element_by_name('CLK{}_PHOFF'.format(self._idx), offset & 0x7F)
 
 
@@ -729,8 +729,8 @@ class Si535x(Device):
                 if self._freq / d <= 40e6:
                     break
 
-            assert self._si._PLL.FREQ_INPUT_MIN <= self._freq / d <= self._si._PLL.FREQ_INPOUT_MAX, 'The input frequency range of the PLLis should be between {:0.2e} to {:0.2e} Hz'.format(
-                self._si._PLL.FREQ_INPUT_MIN, self._si._PLL.FREQ_INPOUT_MAX)
+            assert self._si._PLL.FREQ_INPUT_MIN <= self._freq / d <= self._si._PLL.FREQ_INPUT_MAX, 'The input frequency range of the PLLis should be between {:0.2e} to {:0.2e} Hz'.format(
+                self._si._PLL.FREQ_INPUT_MIN, self._si._PLL.FREQ_INPUT_MAX)
 
             self._divider = d
             self._si._write_element_by_name('CLKIN_DIV', self.CLKIN_DIVIDERS[d])
@@ -790,10 +790,10 @@ class Si535x(Device):
 
         def set_internal_load_capacitance(self, pF = 10):
             self._si._action = 'set_internal_load_capacitance {}'.format(pF)
-            """
-            If the source for the PLL is a crystal, PLLx_SRC must be set to 0 in register 15. XTAL_CL[1:0] must also be set to
-            match the crystal load capacitance (see register 183).
-            """
+
+            # If the source for the PLL is a crystal, PLLx_SRC must be set to 0 in register 15. XTAL_CL[1:0] must also be set to
+            # match the crystal load capacitance (see register 183).
+
             valids = self.CRYSTAL_INTERNAL_LOAD_CAPACITANCEs.keys()
             assert pF in valids, 'valid pF: {}'.format(valids)
 
@@ -829,11 +829,11 @@ class Si535x(Device):
 
 
         def set_input_source(self):
-            '''
-            The VCXO functionality is only supported by PLLB. When using the VCXO function,
-            set the MSNB divide ratio a + b/c such that c = 10^6. This must be taken into consideration
-            when configuring a frequency plan.
-            '''
+
+            # The VCXO functionality is only supported by PLLB. When using the VCXO function,
+            # set the MSNB divide ratio a + b/c such that c = 10^6. This must be taken into consideration
+            # when configuring a frequency plan.
+
             self._source = self.pll
             self.pll.denominator_max = self.DENOMINATOR_MAX
 
@@ -847,19 +847,19 @@ class Si535x(Device):
 
 
         def _set_parameters(self, apr_ppm):
-            """
-            The Si5351B combines free-running clock generation and a VCXO in a single package. The VCXO architecture of
-            the Si5350B eliminates the need for an external pullable crystal. The “pulling” is done at PLLB. Only a standard,
-            low cost, fixed-frequency (25 or 27 MHz) AT-cut crystal is required and is used as the reference source for both
-            PLLA and PLLB.
-            PLLB must be used as the source for any VCXO output clock. Feedback B Multisynth divider ratio must be set
-            such that the denominator, c, in the fractional divider a + b/c is fixed to 10^6. Set VCXO_Param register value
-            according to the equation below. Note that 1.03 is a margining factor to ensure the full desired pull range is
-            achieved. For a desired pull-range of +/– 30 ppm, the value APR in the equation below is 30, for +/– 60 ppm APR
-            is 60, and so on.
 
-            VCXO_Param[21:0] =  1.03 * (128a +  b/10**6) * APR
-            """
+            # The Si5351B combines free-running clock generation and a VCXO in a single package. The VCXO architecture of
+            # the Si5350B eliminates the need for an external pullable crystal. The “pulling” is done at PLLB. Only a standard,
+            # low cost, fixed-frequency (25 or 27 MHz) AT-cut crystal is required and is used as the reference source for both
+            # PLLA and PLLB.
+            # PLLB must be used as the source for any VCXO output clock. Feedback B Multisynth divider ratio must be set
+            # such that the denominator, c, in the fractional divider a + b/c is fixed to 10^6. Set VCXO_Param register value
+            # according to the equation below. Note that 1.03 is a margining factor to ensure the full desired pull range is
+            # achieved. For a desired pull-range of +/– 30 ppm, the value APR in the equation below is 30, for +/– 60 ppm APR
+            # is 60, and so on.
+            #
+            # VCXO_Param[21:0] =  1.03 * (128a +  b/10**6) * APR
+
             pll_divider = self.pll.divider
             a = int(pll_divider)
             b = self.DENOMINATOR_MAX * (pll_divider - a)
@@ -881,7 +881,8 @@ class Si535x(Device):
 
 
     class _SpreadSpectrum:
-        MODES = ('down', 'center')
+        MODES = {'down': 0, 'center': 1}
+        MODES_value_key = _value_key(MODES)
 
         DENOMINATOR_BITS = 15
         DENOMINATOR_MAX = 2 ** DENOMINATOR_BITS - 1
@@ -912,7 +913,7 @@ class Si535x(Device):
 
         @property
         def mode(self):
-            return self.MODES[self._si.map.elements['SSC_MODE']['element'].value]
+            return self.MODES_value_key[self._si.map.elements['SSC_MODE']['element'].value]
 
 
         @property
@@ -927,18 +928,18 @@ class Si535x(Device):
 
         def enable(self, value = True, mode = 'center', ssc_amp = 0.01):
             self._si._action = 'enable Spread Spectrum {}'.format(value)
-            """
-            spread spectrum is only supported by PLLA, and the VCXO functionality is only supported by PLLB.
-            When using the VCXO function, set the MSNB divide ratio a + b/c such that c = 10**6. This must
-            be taken into consideration when configuring a frequency plan.
 
-            Whenever spread spectrum is enabled, FBA_INT must be set to 0.
+            # spread spectrum is only supported by PLLA, and the VCXO functionality is only supported by PLLB.
+            # When using the VCXO function, set the MSNB divide ratio a + b/c such that c = 10**6. This must
+            # be taken into consideration when configuring a frequency plan.
+            # 
+            # Whenever spread spectrum is enabled, FBA_INT must be set to 0.
+            # 
+            #   The Spread Spectrum Enable control pin is available on the Si5351A and B devices. Spread spectrum enable
+            # functionality is a logical OR of the SSEN pin and SSC_EN register bit, so for the SSEN pin to work properly, the
+            # SSC_EN register bit must be set to 0.
 
-              The Spread Spectrum Enable control pin is available on the Si5351A and B devices. Spread spectrum enable
-            functionality is a logical OR of the SSEN pin and SSC_EN register bit, so for the SSEN pin to work properly, the
-            SSC_EN register bit must be set to 0.
-            """
-            valids = self.MODES
+            valids = self.MODES.keys()
             assert mode in valids, 'valid mode: {}'.format(valids)
 
             if value:
@@ -957,11 +958,11 @@ class Si535x(Device):
 
         def enable_ssen_pin(self, value = True):
             self._si._action = 'enable_ssen_pin {}'.format(value)
-            '''
-            The Spread Spectrum Enable control pin is available on the Si5351A and B devices. Spread spectrum enable
-            functionality is a logical OR of the SSEN pin and SSC_EN register bit, so for the SSEN pin to work properly, the
-            SSC_EN register bit must be set to 0.
-            '''
+
+            # The Spread Spectrum Enable control pin is available on the Si5351A and B devices. Spread spectrum enable
+            # functionality is a logical OR of the SSEN pin and SSC_EN register bit, so for the SSEN pin to work properly, the
+            # SSC_EN register bit must be set to 0.
+
             if value:
                 self.enable(True)
                 self._si._write_element_by_name('SSC_EN', 0)
@@ -969,17 +970,17 @@ class Si535x(Device):
 
         def _set_down_spread(self, ssc_amp):
             self._si._action = 'set_down_spread ssc_amp {}'.format(ssc_amp)
-            """
-            For down spread, four spread spectrum parameters need to be written: SSUDP[11:0], SSDN_P1[11:0],
-            SSDN_P2[14:0], and SSDN_P3[14:0].
-            """
+
+            # For down spread, four spread spectrum parameters need to be written: SSUDP[11:0], SSDN_P1[11:0],
+            # SSDN_P2[14:0], and SSDN_P3[14:0].
+
             freq_pfd = self.pll.source.freq
 
-            ssudp = freq_pfd / (4 * 31500)
+            ssudp = math.floor(freq_pfd / (4 * 31500))
 
             ssdn = 64 * self.pll.divider * ssc_amp / ((1 + ssc_amp) * ssudp)
             ssdn_p1 = math.floor(ssdn)
-            ssdn_p2 = self.DENOMINATOR_MAX * (ssdn - ssdn_p1)
+            ssdn_p2 = math.floor(self.DENOMINATOR_MAX * (ssdn - ssdn_p1))
             ssdn_p3 = self.DENOMINATOR_MAX
 
             ssup_p1 = 0
@@ -990,57 +991,57 @@ class Si535x(Device):
             self._set_parameters('UP', ssup_p1, ssup_p2, ssup_p3)
             self._set_parameters('DN', ssdn_p1, ssdn_p2, ssdn_p3)
 
-            self._si._write_element_by_name('SSC_MODE', 0)
+            self._si._write_element_by_name('SSC_MODE', self.MODES['down'])
 
             return ssudp, (ssup_p1, ssup_p2, ssup_p3), (ssdn_p1, ssdn_p2, ssdn_p3)
 
 
         def _set_center_spread(self, ssc_amp):
             self._si._action = 'set_center_spread ssc_amp {}'.format(ssc_amp)
-            """
-            For center spread, seven spread spectrum parameters need to be written: SSUDP[11:0], SSDN_P1[11:0],
-            SSDN_P2[14:0], SSDN_P3[14:0], SSUP_P1[11:0], SSUP_P2[14:0], and SSUP_P3[14:0].
-            """
+
+            # For center spread, seven spread spectrum parameters need to be written: SSUDP[11:0], SSDN_P1[11:0],
+            # SSDN_P2[14:0], SSDN_P3[14:0], SSUP_P1[11:0], SSUP_P2[14:0], and SSUP_P3[14:0].
+
             freq_pfd = self.pll.source.freq
 
-            ssudp = freq_pfd / (4 * 31500)
+            ssudp = math.floor(freq_pfd / (4 * 31500))
 
             ssup = 128 * self.pll.divider * ssc_amp / ((1 - ssc_amp) * ssudp)
             ssup_p1 = math.floor(ssup)
-            ssup_p2 = self.DENOMINATOR_MAX * (ssup - ssup_p1)
+            ssup_p2 = math.floor(self.DENOMINATOR_MAX * (ssup - ssup_p1))
             ssup_p3 = self.DENOMINATOR_MAX
 
             ssdn = 128 * self.pll.divider * ssc_amp / ((1 + ssc_amp) * ssudp)
             ssdn_p1 = math.floor(ssdn)
-            ssdn_p2 = self.DENOMINATOR_MAX * (ssdn - ssdn_p1)
+            ssdn_p2 = math.floor(self.DENOMINATOR_MAX * (ssdn - ssdn_p1))
             ssdn_p3 = self.DENOMINATOR_MAX
 
             self._set_parameters('UDP', ssudp, 0, 1)
             self._set_parameters('UP', ssup_p1, ssup_p2, ssup_p3)
             self._set_parameters('DN', ssdn_p1, ssdn_p2, ssdn_p3)
 
-            self._si._write_element_by_name('SSC_MODE', 1)
+            self._si._write_element_by_name('SSC_MODE', self.MODES['center'])
 
             return ssudp, (ssup_p1, ssup_p2, ssup_p3), (ssdn_p1, ssdn_p2, ssdn_p3)
 
 
         def _set_parameters(self, name, p1, p2, p3):
-            """
-            Spread spectrum can be enabled on any Multisynth output that uses PLLA as its reference. Valid ranges for spread
-            spectrum include –0.1% to –2.5% down spread and up to ± 1.5% center spread. This spread modulation rate is
-            fixed at approximately 31.5 kHz.
-            The following parameters must be known to properly set up spread spectrum:
-            fPFD(A) input frequency to PLLA in Hz (determined in Sec 2 above and referred to in “3.1.2. CMOS Clock
-            Source”). This is also listed in the ClockBuilder Pro generated register map file as “#PFD(MHz)=...”
-            a + b/c PLLA Multisynth ratio (determined in Sec 2 above).
-            sscAMPSpread amplitude (e.g., for down or center spread amplitude of 1%, sscAmp = 0.01).
-            Use the equations below to set up the desired spread spectrum profile.
-            Note: Make sure MSNA is set up in fractional mode when using the spread spectrum feature. See parameter FBA_INT in register 22.
-            """
+
+            # Spread spectrum can be enabled on any Multisynth output that uses PLLA as its reference. Valid ranges for spread
+            # spectrum include –0.1% to –2.5% down spread and up to ± 1.5% center spread. This spread modulation rate is
+            # fixed at approximately 31.5 kHz.
+            # The following parameters must be known to properly set up spread spectrum:
+            # fPFD(A) input frequency to PLLA in Hz (determined in Sec 2 above and referred to in “3.1.2. CMOS Clock
+            # Source”). This is also listed in the ClockBuilder Pro generated register map file as “#PFD(MHz)=...”
+            # a + b/c PLLA Multisynth ratio (determined in Sec 2 above).
+            # sscAMPSpread amplitude (e.g., for down or center spread amplitude of 1%, sscAmp = 0.01).
+            # Use the equations below to set up the desired spread spectrum profile.
+            # Note: Make sure MSNA is set up in fractional mode when using the spread spectrum feature. See parameter FBA_INT in register 22.
+
             valids = ('UP', 'DN', 'UDP')
             assert name in valids, 'valid name: {}'.format(valids)
 
-            params = [math.floor(p) for p in (p1, p2, p3)]
+            params = (p1, p2, p3)
 
             bits_12 = ((11, 8), (7, 0))
             bits_15 = ((14, 8), (7, 0))

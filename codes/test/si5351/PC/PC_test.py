@@ -34,8 +34,8 @@ ms = si.multisynths[0]
 clk = si.clocks[0]
 ss = si.spread_spectrum
 
-ss.enable(True, mode = 'center')
-ss.enable(True, mode = 'down')
+# ss.enable(True, mode = 'center')
+# ss.enable(True, mode = 'down')
 # print()
 
 # clkin._set_divider()
@@ -47,13 +47,14 @@ clk.power_down(False)
 clk.enable()
 # si.enable(False)
 # clk.enable(True)
-clk.set_frequency(50.4e6)
+# clk.set_frequency(50.4e6)
 # clk.set_frequency(90e6)
-# # si.init()
+# si.init()
 # print()
-clk.set_frequency(225e6)
+# clk.set_frequency(225e6)
 # clk.set_frequency(5.2e6)
 # clk.set_frequency(2289)
+
 
 print(clk.freq)
 
