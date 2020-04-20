@@ -1,6 +1,5 @@
 from clock_generators.si535x.si5351 import Si5351
 from utilities.adapters import peripherals
-from pprint import pprint
 
 
 registers_values = [(0, 0), (1, 0), (2, 0), (3, 0), (9, 0), (15, 0), (16, 79), (17, 79), (18, 79), (19, 79), (20, 79),
@@ -34,33 +33,42 @@ ms = si.multisynths[0]
 clk = si.clocks[0]
 ss = si.spread_spectrum
 
+clk.set_phase(75)
+
+print(clk.phase)
+print()
 # ss.enable(True, mode = 'center')
 # ss.enable(True, mode = 'down')
+# ss.enable(False)
 # print()
 
 # clkin._set_divider()
 # vcxo.set_pull_range(60)
 
 # si.init()
-si._power_down_all_outputs()
-clk.power_down(False)
-clk.enable()
+# si._power_down_all_outputs()
+# clk.power_down(False)
+# clk.enable()
 # si.enable(False)
 # clk.enable(True)
 # clk.set_frequency(50.4e6)
-# clk.set_frequency(90e6)
-# si.init()
-# print()
+# clk.set_frequency(90.5e6)
+# clk.set_frequency(97.7e6)
 # clk.set_frequency(225e6)
 # clk.set_frequency(5.2e6)
 # clk.set_frequency(2289)
-
+# clk.set_frequency(900e6 / (6 + 1 / (2**20 - 1)))
+# clk.set_frequency(150e6 - 24)
+# clk.set_frequency(149999976)
+# clk.set_frequency(900e6 / 9.5)
+clk.set_frequency(83336000)
 
 print(clk.freq)
+print()
 
 # print(clk.status)
 
-si.restore_clocks_freqs(can_tune_pll = False)
+# si.restore_clocks_freqs(can_tune_pll = False)
 
 # for o in (clkin, xtal, vcxo, pll,  ss):
 #     print(o.status)

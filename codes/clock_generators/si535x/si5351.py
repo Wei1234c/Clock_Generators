@@ -6,4 +6,5 @@ except Exception as e:
 
 
 class Si5351(Si535x):
-    pass
+
+    OUTPUT_CLOCKS_IN_USE = (0, 1, 2)
