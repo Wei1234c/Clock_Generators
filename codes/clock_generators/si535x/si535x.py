@@ -1216,7 +1216,7 @@ class Si535x(Device):
 
         # hierachy structure
         xtal = self._Xtal(self, freq_ref)
-        pll = self._PLL(self, 0)
+        pll = self._PLL(self, 'A')
         multisynth = self._Multisynth(self, 0)
         clock = self._Clock(self, 0)
 
