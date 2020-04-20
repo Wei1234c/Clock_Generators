@@ -101,13 +101,17 @@ class Si535x(Device):
         def __init__(self, si, idx, denominator_max = DENOMINATOR_MAX):
             self._si = si
             self._idx = idx
-            self._name = str(idx)
 
             # set divider first, source second.
             self.denominator_max = denominator_max
             self._set_divider(self.DIVIDER_DEFAULT)
             self._source = None
             # self.set_input_source()  # need implement
+
+
+        @property
+        def name(self):
+            return str(self._idx)
 
 
         @property
@@ -208,7 +212,7 @@ class Si535x(Device):
                 param_idx = i + 1
                 for bits_range in bits_ranges[param_idx]:
                     idx_msb, idx_lsb = bits_range
-                    element_name = 'MS{}_P{}_{}_{}'.format(self._name, param_idx, idx_msb, idx_lsb)
+                    element_name = 'MS{}_P{}_{}_{}'.format(self.name, param_idx, idx_msb, idx_lsb)
                     self._si._write_element_by_name(element_name, _section_value(params[i], idx_msb, idx_lsb))
 
             return True
@@ -237,10 +241,7 @@ class Si535x(Device):
 
     class _PLL(_MultisynthBase):
 
-        NAMES = ('A', 'B')
-
-        MODES = {'down': 0, 'center': 1}
-        MODES_value_key = _value_key(MODES)
+        NAMES = {'A': 0, 'B': 1}
 
         FREQ_INPUT_MIN = int(10e6)
         FREQ_INPUT_MAX = int(40e6)
@@ -253,9 +254,9 @@ class Si535x(Device):
         DIVIDER_DEFAULT = 36
 
 
-        def __init__(self, si, idx, xtal_as_source = True):
-            super().__init__(si, idx)
-            self._name = 'N{}'.format(self.NAMES[self._idx])
+        def __init__(self, si, name, xtal_as_source = True):
+            self._name = name
+            super().__init__(si, 0)
             self._xtal_as_source = xtal_as_source
             self.init()
 
@@ -265,6 +266,11 @@ class Si535x(Device):
             self._set_divider(self.DIVIDER_DEFAULT)
             self.set_input_source(xtal_as_source = self._xtal_as_source)
             self.reset()  # reset after source set. https://groups.io/g/BITX20/topic/si5351a_facts_and_myths/5430607
+
+
+        @property
+        def name(self):
+            return 'N' + self._name
 
 
         @property
@@ -289,7 +295,7 @@ class Si535x(Device):
         def reset(self):
             self._si._action = 'reset pll {}'.format(self._idx)
 
-            element_name = 'PLL{}_RST'.format(self.NAMES[self._idx])
+            element_name = 'PLL{}_RST'.format(self._name)
             self._si._write_element_by_name(element_name, 1)
 
             self._si.map.elements[element_name]['element'].value = 0
@@ -316,7 +322,7 @@ class Si535x(Device):
                 'Must {} <= F_input <= {}, now is {}'.format(self.FREQ_INPUT_MIN, self.FREQ_INPUT_MAX,
                                                              self.source.freq)
 
-            element_name = 'PLL{}_SRC'.format(self.NAMES[self._idx])
+            element_name = 'PLL{}_SRC'.format(self._name)
             self._si._write_element_by_name(element_name, 0 if xtal_as_source else 1)
 
             if not xtal_as_source:
@@ -327,7 +333,7 @@ class Si535x(Device):
 
         @property
         def is_in_integer_mode(self):
-            return self._si.map.elements['FB{}_INT'.format(self.NAMES[self._idx])]['element'].value == 1
+            return self._si.map.elements['FB{}_INT'.format(self._name)]['element'].value == 1
 
 
         def _set_integer_mode(self, value = True):
@@ -335,7 +341,7 @@ class Si535x(Device):
             # FBB_INT respectively. In most cases setting this bit will improve jitter when using even integer divide values.
             # Whenever spread spectrum is enabled, FBA_INT must be set to 0.
 
-            self._si._write_element_by_name('FB{}_INT'.format(self.NAMES[self._idx]), 1 if value else 0)
+            self._si._write_element_by_name('FB{}_INT'.format(self._name), 1 if value else 0)
 
 
         def _post_set_divider(self):
@@ -352,9 +358,9 @@ class Si535x(Device):
         DIVIDER_MAX_INTEGER_ONLY_MULTISYNTHS = 254
 
 
-        def __init__(self, si, idx, pll_idx = 0):
+        def __init__(self, si, idx, pll = 'A'):
             super().__init__(si, idx)
-            self.set_input_source(pll_idx = pll_idx)
+            self.set_input_source(pll = pll)
 
 
         @property
@@ -365,18 +371,18 @@ class Si535x(Device):
             return status
 
 
-        def set_input_source(self, pll_idx = 0):
-            self._si._action = 'multisynth set_input_source {}'.format(pll_idx)
+        def set_input_source(self, pll = 'A'):
+            self._si._action = 'multisynth set_input_source PLL {}'.format(pll)
 
             # Each of these dividers can be set to use PLLA or PLLB as its reference by setting MSx_SRC to 0 or 1 respectively.
             # See bit 5 description of registers 16-23.
 
-            valids = range(len(self._si._PLL.NAMES))
-            assert pll_idx in valids, 'valid pll_idx: {}'.format(valids)
+            valids = self._si._PLL.NAMES.keys()
+            assert pll in valids, 'valid PLL: {}'.format(valids)
 
-            self._source = self._si.plls[pll_idx]
+            self._source = self._si.plls[pll]
             self._frequency = self.freq
-            self._si._write_element_by_name('MS{}_SRC'.format(self._idx), pll_idx)
+            self._si._write_element_by_name('MS{}_SRC'.format(self._idx), self._si._PLL.NAMES[pll])
 
 
         def enable_fanout(self, value = True):
@@ -829,7 +835,7 @@ class Si535x(Device):
 
         @property
         def pll(self):
-            return self._si.plls[self._si._PLL.NAMES.index('B')]
+            return self._si.plls['B']
 
 
         @property
@@ -912,7 +918,7 @@ class Si535x(Device):
 
         @property
         def pll(self):
-            return self._si.plls[self._si._PLL.NAMES.index('A')]
+            return self._si.plls['A']
 
 
         @property
@@ -1100,7 +1106,7 @@ class Si535x(Device):
         self.interrupts = self._Interrupts(self)
         self.clkin = self._CLKIN(self, self._freq_clkin)
         self.xtal = self._Xtal(self, self._freq_xtal)
-        self.plls = [self._PLL(self, i) for i in range(len(self._PLL.NAMES))]
+        self.plls = {k: self._PLL(self, name = k) for k in self._PLL.NAMES.keys()}
         self.multisynths = [self._Multisynth(self, i) for i in range(self.n_channels)]
         self.clocks = [self._Clock(self, i) for i in range(self.n_channels)]
         self.spread_spectrum = self._SpreadSpectrum(self)  # PLL_A as source
