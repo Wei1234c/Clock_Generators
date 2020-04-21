@@ -13,6 +13,7 @@ except:
     from collections import OrderedDict
     from interfaces import *
     from peripherals import I2C
+    from registers_map import _get_registers_map
 
 
 
@@ -41,7 +42,7 @@ class Si535x(Device):
 
     class _Interrupts:
 
-        def __init__(self, si, masks = 0x00):
+        def __init__(self, adf, masks = 0x00):
             self._si = si
             self.set_masks(masks)
             self.clear_stickys()
@@ -98,7 +99,7 @@ class Si535x(Device):
         INTEGER_ONLY_MULTISYNTHS = (6, 7)
 
 
-        def __init__(self, si, idx, denominator_max = DENOMINATOR_MAX):
+        def __init__(self, adf, idx, denominator_max = DENOMINATOR_MAX):
             self._si = si
             self._idx = idx
 
@@ -118,6 +119,8 @@ class Si535x(Device):
         def status(self):
             return OrderedDict({'type'       : self.__class__.__name__,
                                 'idx'        : self._idx,
+                                'source_type': self.source.__class__.__name__,
+                                'source_idx' : self.source._idx,
                                 'source_freq': self.source.freq,
                                 'my_freq'    : self.freq,
                                 'my_divider' : self.divider})
@@ -254,9 +257,9 @@ class Si535x(Device):
         DIVIDER_DEFAULT = 36
 
 
-        def __init__(self, si, name, xtal_as_source = True):
+        def __init__(self, adf, name, xtal_as_source = True):
             self._name = name
-            super().__init__(si, 0)
+            super().__init__(adf, self.NAMES[name])
             self._xtal_as_source = xtal_as_source
             self.init()
 
@@ -358,8 +361,8 @@ class Si535x(Device):
         DIVIDER_MAX_INTEGER_ONLY_MULTISYNTHS = 254
 
 
-        def __init__(self, si, idx, pll = 'A'):
-            super().__init__(si, idx)
+        def __init__(self, adf, idx, pll = 'A'):
+            super().__init__(adf, idx)
             self.set_input_source(pll = pll)
 
 
@@ -463,13 +466,13 @@ class Si535x(Device):
         R_DIVIDERs = {1: 0, 2: 1, 4: 2, 8: 3, 16: 4, 32: 5, 64: 6, 128: 7}
 
 
-        def __init__(self, si, idx,
+        def __init__(self, adf, idx,
                      freq = None,
                      source = 'MultiSynth',
                      strength_mA = 8,
                      disable_state = 'LOW'):
 
-            super().__init__(si, idx)
+            super().__init__(adf, idx)
             self._set_strength(strength_mA)
             self._set_disable_state(disable_state)
             self.set_input_source(source)
@@ -479,10 +482,11 @@ class Si535x(Device):
         @property
         def status(self):
             status = super().status
-            status.update({'enabled'             : self.enabled,
+            status.update({'power_downed'        : self.power_downed,
+                           'enabled'             : self.enabled,
                            'oeb_pin_masked'      : self.oeb_pin_masked,
-                           'power_downed'        : self.power_downed,
-                           'phase_offset_enabled': self.phase_offset_enabled, })
+                           'phase_offset_enabled': self.phase_offset_enabled,
+                           'phase'               : self.phase if self.phase_offset_enabled else 0})
             return status
 
 
@@ -722,9 +726,9 @@ class Si535x(Device):
         CLKIN_DIVIDERS = {1: 0x00, 2: 0x01, 4: 0x20, 8: 0x03}
 
 
-        def __init__(self, si, freq):
+        def __init__(self, adf, freq):
             self.set_frequency(freq)
-            super().__init__(si, idx = 0)
+            super().__init__(adf, idx = 0)
             self.set_input_source()
             self.enable_fanout(True)
 
@@ -732,6 +736,7 @@ class Si535x(Device):
         @property
         def status(self):
             return OrderedDict({'type'   : self.__class__.__name__,
+                                'idx'    : self._idx,
                                 'my_freq': self.freq})
 
 
@@ -798,8 +803,8 @@ class Si535x(Device):
         CRYSTAL_INTERNAL_LOAD_CAPACITANCEs = {6: 0x01, 8: 0x02, 10: 0x03}
 
 
-        def __init__(self, si, freq, pF = 10):
-            super().__init__(si, freq = freq)
+        def __init__(self, adf, freq, pF = 10):
+            super().__init__(adf, freq = freq)
             self.set_internal_load_capacitance(pF = pF)
 
 
@@ -830,7 +835,7 @@ class Si535x(Device):
 
 
         def __init__(self, si):
-            super().__init__(si, None)
+            super().__init__(adf, None)
 
 
         @property
@@ -1275,6 +1280,45 @@ class Si535x(Device):
     @property
     def status(self):
         return self._read_register_by_name('Device_Status')
+
+
+    @property
+    def current_configuration(self):
+        import pandas as pd
+
+        df_clkin = pd.DataFrame([self.clkin.status])
+        df_xtal = pd.DataFrame([self.xtal.status])
+        df_plls = pd.DataFrame([self.plls[i].status for i in self._PLL.NAMES.keys()])
+        df_multisynths = pd.DataFrame([self.multisynths[i].status for i in range(self.N_OUTPUT_CLOCKS)])
+        df_clocks = pd.DataFrame([self.clocks[i].status for i in range(self.N_OUTPUT_CLOCKS)])
+
+        df = pd.merge(df_xtal, df_plls, how = 'outer',
+                      left_on = ['type', 'idx'], right_on = ['source_type', 'source_idx'],
+                      suffixes = ('_xtal', '_pll'))
+        df.drop(columns = ['source_type', 'source_idx', 'source_freq'], inplace = True)
+
+        df = pd.merge(df, df_multisynths, how = 'outer',
+                      left_on = ['type_pll', 'idx_pll'], right_on = ['source_type', 'source_idx'],
+                      suffixes = ('_pll', '_multisynth'))
+        df.drop(columns = ['source_type', 'source_idx', 'source_freq'], inplace = True)
+
+        df = pd.merge(df, df_clocks, how = 'outer',
+                      left_on = ['type', 'idx'], right_on = ['source_type', 'source_idx'],
+                      suffixes = ('_multisynth', '_clock'))
+        df.drop(columns = ['type_pll', 'type_multisynth', 'type_clock', 'source_type', 'source_idx', 'source_freq'],
+                inplace = True)
+
+        df.columns = ['mclk_type', 'mclk_idx', 'mclk_freq', 'pll_idx', 'pll_freq', 'pll_divider', 'multisynth_idx',
+                      'multisynth_freq', 'multisynth_divider', 'multisynth_in_integer_mode', 'multisynth_divided_by_4',
+                      'clock_idx', 'clock_freq', 'clock_divider', 'power_downed', 'enabled', 'oeb_pin_masked',
+                      'phase_offset_enabled', 'phase']
+
+        df = df.reindex(
+            columns = ['mclk_type', 'mclk_idx', 'mclk_freq', 'pll_idx', 'pll_divider', 'pll_freq', 'multisynth_idx',
+                       'multisynth_divider', 'multisynth_freq', 'multisynth_in_integer_mode', 'multisynth_divided_by_4',
+                       'clock_idx', 'clock_divider', 'clock_freq', 'power_downed', 'enabled', 'oeb_pin_masked',
+                       'phase_offset_enabled', 'phase'])
+        return df
 
 
     @property

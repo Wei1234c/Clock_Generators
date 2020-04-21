@@ -1,1 +1,1 @@
-from .si5351 import Si5351
+from .si5351 import Si5351A_B_GT

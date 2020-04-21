@@ -1,4 +1,7 @@
-from utilities.register import Element, Register, RegistersMap
+try:
+    from utilities.register import Element, Register, RegistersMap
+except:
+    from register import Element, Register, RegistersMap
 
 
 

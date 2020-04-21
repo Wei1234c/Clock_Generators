@@ -1,8 +1,7 @@
 #  Failed ! _get_registers_map is too big to fit in ESP32
 
 from peripherals import I2C
-from si5351 import Si5351
-from registers_map import _get_registers_map
+from si5351 import Si5351A_B_GT
 
 
 with_hardware_device = False
@@ -12,4 +11,4 @@ if with_hardware_device:
 else:
     _i2c = None  # using None for testing without actual hardware device.
 
-si = Si5351(_i2c)
+si = Si5351A_B_GT(_i2c)

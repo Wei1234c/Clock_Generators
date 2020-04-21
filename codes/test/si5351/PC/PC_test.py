@@ -1,4 +1,4 @@
-from clock_generators.si535x.si5351 import Si5351
+from clock_generators.si535x.si5351 import Si5351A_B_GT
 from utilities.adapters import peripherals
 
 
@@ -21,7 +21,7 @@ if with_hardware_device:
 else:
     _i2c = None  # using None for testing without actual hardware device.
 
-si = Si5351(_i2c)
+si = Si5351A_B_GT(_i2c)
 # si.print_registers_values()
 # si.enable(False)
 

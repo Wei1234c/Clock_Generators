@@ -5,6 +5,6 @@ except Exception as e:
 
 
 
-class Si5351(Si535x):
+class Si5351A_B_GT(Si535x):
 
     OUTPUT_CLOCKS_IN_USE = (0, 1, 2)
