@@ -42,7 +42,7 @@ class Si535x(Device):
 
     class _Interrupts:
 
-        def __init__(self, adf, masks = 0x00):
+        def __init__(self, si, masks = 0x00):
             self._si = si
             self.set_masks(masks)
             self.clear_stickys()
@@ -99,7 +99,7 @@ class Si535x(Device):
         INTEGER_ONLY_MULTISYNTHS = (6, 7)
 
 
-        def __init__(self, adf, idx, denominator_max = DENOMINATOR_MAX):
+        def __init__(self, si, idx, denominator_max = DENOMINATOR_MAX):
             self._si = si
             self._idx = idx
 
@@ -179,7 +179,8 @@ class Si535x(Device):
             a, b, c, _is_even_integer = self._validate_divider(divider)
 
             p1 = 128 * a + math.floor(128 * b / c) - 512
-            p2 = 128 * b - c * math.floor(128 * b / c)
+            # p2 = 128 * b - c * math.floor(128 * b / c)
+            p2 = math.floor(128 * b - c * math.floor(128 * b / c))  # better (less noisy) when divider == 6.5
             p3 = c
 
             if self._idx in self.INTEGER_ONLY_MULTISYNTHS:
@@ -192,8 +193,26 @@ class Si535x(Device):
             return result
 
 
-        def _post_set_divider(self):
-            pass
+        def _validate_divider(self, divider):
+
+            assert self.DIVIDER_MIN + 1 / self.DENOMINATOR_MAX <= divider <= self.DIVIDER_MAX, \
+                'Must {} + 1 / ((2 ** {}) - 1) <=  ({})  <= {}'.format(self.DIVIDER_MIN,
+                                                                       self.DENOMINATOR_BITS,
+                                                                       divider,
+                                                                       self.DIVIDER_MAX)
+            a = math.floor(divider)
+            # b = math.floor(self.denominator_max * (divider - a))
+            b = self.denominator_max * (divider - a)  # better (less noisy) when divider == 6.5
+            c = self.denominator_max  # vcxo and pll use different denominators to fill up P3 register value,
+
+            _is_even_integer = self._is_even_integer(divider)
+
+            return a, b, c, _is_even_integer
+
+
+        def _is_even_integer(self, divider):
+            d = math.floor(divider)
+            return d == divider and d % 2 == 0
 
 
         def _set_integer_mode(self, value = True):
@@ -221,25 +240,8 @@ class Si535x(Device):
             return True
 
 
-        def _validate_divider(self, divider):
-
-            assert self.DIVIDER_MIN + 1 / self.DENOMINATOR_MAX <= divider <= self.DIVIDER_MAX, \
-                'Must {} + 1 / ((2 ** {}) - 1) <=  ({})  <= {}'.format(self.DIVIDER_MIN,
-                                                                       self.DENOMINATOR_BITS,
-                                                                       divider,
-                                                                       self.DIVIDER_MAX)
-            a = math.floor(divider)
-            b = math.floor(self.denominator_max * (divider - a))
-            c = self.denominator_max  # vcxo and pll use different denominators to fill up P3 register value,
-
-            _is_even_integer = self._is_even_integer(divider)
-
-            return a, b, c, _is_even_integer
-
-
-        def _is_even_integer(self, divider):
-            d = math.floor(divider)
-            return d == divider and d % 2 == 0
+        def _post_set_divider(self):
+            pass
 
 
     class _PLL(_MultisynthBase):
@@ -257,9 +259,9 @@ class Si535x(Device):
         DIVIDER_DEFAULT = 36
 
 
-        def __init__(self, adf, name, xtal_as_source = True):
+        def __init__(self, si, name, xtal_as_source = True):
             self._name = name
-            super().__init__(adf, self.NAMES[name])
+            super().__init__(si, self.NAMES[name])
             self._xtal_as_source = xtal_as_source
             self.init()
 
@@ -361,8 +363,8 @@ class Si535x(Device):
         DIVIDER_MAX_INTEGER_ONLY_MULTISYNTHS = 254
 
 
-        def __init__(self, adf, idx, pll = 'A'):
-            super().__init__(adf, idx)
+        def __init__(self, si, idx, pll = 'A'):
+            super().__init__(si, idx)
             self.set_input_source(pll = pll)
 
 
@@ -466,13 +468,13 @@ class Si535x(Device):
         R_DIVIDERs = {1: 0, 2: 1, 4: 2, 8: 3, 16: 4, 32: 5, 64: 6, 128: 7}
 
 
-        def __init__(self, adf, idx,
+        def __init__(self, si, idx,
                      freq = None,
                      source = 'MultiSynth',
                      strength_mA = 8,
                      disable_state = 'LOW'):
 
-            super().__init__(adf, idx)
+            super().__init__(si, idx)
             self._set_strength(strength_mA)
             self._set_disable_state(disable_state)
             self.set_input_source(source)
@@ -726,9 +728,9 @@ class Si535x(Device):
         CLKIN_DIVIDERS = {1: 0x00, 2: 0x01, 4: 0x20, 8: 0x03}
 
 
-        def __init__(self, adf, freq):
+        def __init__(self, si, freq):
             self.set_frequency(freq)
-            super().__init__(adf, idx = 0)
+            super().__init__(si, idx = 0)
             self.set_input_source()
             self.enable_fanout(True)
 
@@ -803,8 +805,8 @@ class Si535x(Device):
         CRYSTAL_INTERNAL_LOAD_CAPACITANCEs = {6: 0x01, 8: 0x02, 10: 0x03}
 
 
-        def __init__(self, adf, freq, pF = 10):
-            super().__init__(adf, freq = freq)
+        def __init__(self, si, freq, pF = 10):
+            super().__init__(si, freq = freq)
             self.set_internal_load_capacitance(pF = pF)
 
 
@@ -835,7 +837,7 @@ class Si535x(Device):
 
 
         def __init__(self, si):
-            super().__init__(adf, None)
+            super().__init__(si, None)
 
 
         @property

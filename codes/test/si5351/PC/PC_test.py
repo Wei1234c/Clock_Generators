@@ -24,7 +24,7 @@ else:
 si = Si5351A_B_GT(_i2c)
 # si.print_registers_values()
 # si.enable(False)
-
+si.init()
 clkin = si.clkin
 xtal = si.xtal
 # vcxo = si.vcxo
@@ -33,10 +33,10 @@ ms = si.multisynths[0]
 clk = si.clocks[0]
 ss = si.spread_spectrum
 
-clk.set_phase(75)
+# clk.set_phase(75)
+# print(clk.phase)
+# print()
 
-print(clk.phase)
-print()
 # ss.enable(True, mode = 'center')
 # ss.enable(True, mode = 'down')
 # ss.enable(False)
@@ -60,8 +60,12 @@ print()
 # clk.set_frequency(900e6 / (6 + 1 / (2**20 - 1)))
 # clk.set_frequency(150e6 - 24)
 # clk.set_frequency(149999976)
-# clk.set_frequency(900e6 / 9.5)
-clk.set_frequency(83336000)
+print()
+# clk.set_frequency(900e6 / 6.5)
+# clk.set_frequency(900e6 / 8.5)
+# clk.set_frequency(900e6 / 8)
+# clk.set_frequency(3e6)
+# clk.set_frequency(83336000)
 
 print(clk.freq)
 print()
