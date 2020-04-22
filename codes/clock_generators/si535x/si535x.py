@@ -179,8 +179,12 @@ class Si535x(Device):
             a, b, c, _is_even_integer = self._validate_divider(divider)
 
             p1 = 128 * a + math.floor(128 * b / c) - 512
+
             # p2 = 128 * b - c * math.floor(128 * b / c)
-            p2 = math.floor(128 * b - c * math.floor(128 * b / c))  # better (less noisy) when divider == 6.5
+            # p2 = math.floor(128 * b - c * math.floor(128 * b / c))
+            # p2 = math.floor(c * (128 * b / c) - c * math.floor(128 * b / c))
+            p2 = math.floor(c * (128 * b / c - math.floor(128 * b / c)))
+
             p3 = c
 
             if self._idx in self.INTEGER_ONLY_MULTISYNTHS:
@@ -201,8 +205,7 @@ class Si535x(Device):
                                                                        divider,
                                                                        self.DIVIDER_MAX)
             a = math.floor(divider)
-            # b = math.floor(self.denominator_max * (divider - a))
-            b = self.denominator_max * (divider - a)  # better (less noisy) when divider == 6.5
+            b = math.floor(self.denominator_max * (divider - a))
             c = self.denominator_max  # vcxo and pll use different denominators to fill up P3 register value,
 
             _is_even_integer = self._is_even_integer(divider)

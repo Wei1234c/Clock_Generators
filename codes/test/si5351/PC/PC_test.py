@@ -14,7 +14,7 @@ registers_values = [(0, 0), (1, 0), (2, 0), (3, 0), (9, 0), (15, 0), (16, 79), (
                     (162, 0), (163, 0), (164, 0), (165, 0), (166, 0), (167, 0), (168, 0), (169, 0), (170, 0),
                     (177, 160), (183, 210), (187, 208)]
 
-with_hardware_device = False
+with_hardware_device = True
 
 if with_hardware_device:
     _i2c = peripherals.I2C.get_Ftdi_i2c()
@@ -62,7 +62,7 @@ ss = si.spread_spectrum
 # clk.set_frequency(149999976)
 print()
 # clk.set_frequency(900e6 / 6.5)
-# clk.set_frequency(900e6 / 8.5)
+clk.set_frequency(900e6 / 8.5)
 # clk.set_frequency(900e6 / 8)
 # clk.set_frequency(3e6)
 # clk.set_frequency(83336000)
