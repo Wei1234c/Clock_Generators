@@ -1,0 +1,358 @@
+try:
+    from utilities.register import Element, Register
+except:
+    from register import Element, Register
+
+
+
+def _get_all_registers():
+    registers = []
+
+    registers.append(Register(name = 'Device_Status', address = 0,
+                              elements = [Element(name = 'SYS_INIT', idx_lowest_bit = 7, n_bits = 1, value = 0, ),
+                                          Element(name = 'LOL_B', idx_lowest_bit = 6, n_bits = 1, value = 0, ),
+                                          Element(name = 'LOL_A', idx_lowest_bit = 5, n_bits = 1, value = 0, ),
+                                          Element(name = 'LOS_CLKIN', idx_lowest_bit = 4, n_bits = 1, value = 0, ),
+                                          Element(name = 'LOS_XTAL', idx_lowest_bit = 3, n_bits = 1, value = 0, ),
+                                          Element(name = 'Reserved_2', idx_lowest_bit = 2, n_bits = 1, value = 0,
+                                                  read_only = True, ),
+                                          Element(name = 'REVID', idx_lowest_bit = 0, n_bits = 2, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Interrupt_Status_Sticky', address = 1,
+                              elements = [Element(name = 'SYS_INIT_STKY', idx_lowest_bit = 7, n_bits = 1, value = 0, ),
+                                          Element(name = 'LOL_B_STKY', idx_lowest_bit = 6, n_bits = 1, value = 0, ),
+                                          Element(name = 'LOL_A_STKY', idx_lowest_bit = 5, n_bits = 1, value = 0, ),
+                                          Element(name = 'LOS_CLKIN_STKY', idx_lowest_bit = 4, n_bits = 1, value = 0, ),
+                                          Element(name = 'LOS_XTAL_STKY', idx_lowest_bit = 3, n_bits = 1, value = 0, ),
+                                          Element(name = 'Reserved_0', idx_lowest_bit = 0, n_bits = 3, value = 0,
+                                                  read_only = True, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Interrupt_Status_Mask', address = 2,
+                              elements = [Element(name = 'SYS_INIT_MASK', idx_lowest_bit = 7, n_bits = 1, value = 0, ),
+                                          Element(name = 'LOL_B_MASK', idx_lowest_bit = 6, n_bits = 1, value = 0, ),
+                                          Element(name = 'LOL_A_MASK', idx_lowest_bit = 5, n_bits = 1, value = 0, ),
+                                          Element(name = 'LOS__CLKIN_MASK', idx_lowest_bit = 4, n_bits = 1,
+                                                  value = 0, ),
+                                          Element(name = 'LOS__XTAL_MASK', idx_lowest_bit = 3, n_bits = 1, value = 0, ),
+                                          Element(name = 'Reserved_0', idx_lowest_bit = 0, n_bits = 3, value = 0,
+                                                  read_only = True, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Output_Enable_Control', address = 3,
+                              elements = [Element(name = 'CLK7_OEB', idx_lowest_bit = 7, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK6_OEB', idx_lowest_bit = 6, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK5_OEB', idx_lowest_bit = 5, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK4_OEB', idx_lowest_bit = 4, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK3_OEB', idx_lowest_bit = 3, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK2_OEB', idx_lowest_bit = 2, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK1_OEB', idx_lowest_bit = 1, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK0_OEB', idx_lowest_bit = 0, n_bits = 1, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'OEB_Pin_Enable_Control_Mask', address = 9,
+                              elements = [Element(name = 'OEB_MASK_7', idx_lowest_bit = 7, n_bits = 1, value = 0, ),
+                                          Element(name = 'OEB_MASK_6', idx_lowest_bit = 6, n_bits = 1, value = 0, ),
+                                          Element(name = 'OEB_MASK_5', idx_lowest_bit = 5, n_bits = 1, value = 0, ),
+                                          Element(name = 'OEB_MASK_4', idx_lowest_bit = 4, n_bits = 1, value = 0, ),
+                                          Element(name = 'OEB_MASK_3', idx_lowest_bit = 3, n_bits = 1, value = 0, ),
+                                          Element(name = 'OEB_MASK_2', idx_lowest_bit = 2, n_bits = 1, value = 0, ),
+                                          Element(name = 'OEB_MASK_1', idx_lowest_bit = 1, n_bits = 1, value = 0, ),
+                                          Element(name = 'OEB_MASK_0', idx_lowest_bit = 0, n_bits = 1, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'PLL_Input_Source', address = 15,
+                              elements = [Element(name = 'CLKIN_DIV', idx_lowest_bit = 6, n_bits = 2, value = 0, ),
+                                          Element(name = 'Reserved_4', idx_lowest_bit = 4, n_bits = 2, value = 0,
+                                                  read_only = True, ),
+                                          Element(name = 'PLLB_SRC', idx_lowest_bit = 3, n_bits = 1, value = 0, ),
+                                          Element(name = 'PLLA_SRC', idx_lowest_bit = 2, n_bits = 1, value = 0, ),
+                                          Element(name = 'Reserved_0', idx_lowest_bit = 0, n_bits = 2, value = 0,
+                                                  read_only = True, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'CLK0_Control', address = 16,
+                              elements = [Element(name = 'CLK0_PDN', idx_lowest_bit = 7, n_bits = 1, value = 0, ),
+                                          Element(name = 'MS0_INT', idx_lowest_bit = 6, n_bits = 1, value = 0, ),
+                                          Element(name = 'MS0_SRC', idx_lowest_bit = 5, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK0_INV', idx_lowest_bit = 4, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK0_SRC', idx_lowest_bit = 2, n_bits = 2, value = 0, ),
+                                          Element(name = 'CLK0_IDRV', idx_lowest_bit = 0, n_bits = 2, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'CLK1_Control', address = 17,
+                              elements = [Element(name = 'CLK1_PDN', idx_lowest_bit = 7, n_bits = 1, value = 0, ),
+                                          Element(name = 'MS1_INT', idx_lowest_bit = 6, n_bits = 1, value = 0, ),
+                                          Element(name = 'MS1_SRC', idx_lowest_bit = 5, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK1_INV', idx_lowest_bit = 4, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK1_SRC', idx_lowest_bit = 2, n_bits = 2, value = 0, ),
+                                          Element(name = 'CLK1_IDRV', idx_lowest_bit = 0, n_bits = 2, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'CLK2_Control', address = 18,
+                              elements = [Element(name = 'CLK2_PDN', idx_lowest_bit = 7, n_bits = 1, value = 0, ),
+                                          Element(name = 'MS2_INT', idx_lowest_bit = 6, n_bits = 1, value = 0, ),
+                                          Element(name = 'MS2_SRC', idx_lowest_bit = 5, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK2_INV', idx_lowest_bit = 4, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK2_SRC', idx_lowest_bit = 2, n_bits = 2, value = 0, ),
+                                          Element(name = 'CLK2_IDRV', idx_lowest_bit = 0, n_bits = 2, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'CLK3_Control', address = 19,
+                              elements = [Element(name = 'CLK3_PDN', idx_lowest_bit = 7, n_bits = 1, value = 0, ),
+                                          Element(name = 'MS3_INT', idx_lowest_bit = 6, n_bits = 1, value = 0, ),
+                                          Element(name = 'MS3_SRC', idx_lowest_bit = 5, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK3_INV', idx_lowest_bit = 4, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK3_SRC', idx_lowest_bit = 2, n_bits = 2, value = 0, ),
+                                          Element(name = 'CLK3_IDRV', idx_lowest_bit = 0, n_bits = 2, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'CLK6_Control', address = 22,
+                              elements = [Element(name = 'CLK6_PDN', idx_lowest_bit = 7, n_bits = 1, value = 0, ),
+                                          Element(name = 'FBA_INT', idx_lowest_bit = 6, n_bits = 1, value = 0, ),
+                                          Element(name = 'MS6_SRC', idx_lowest_bit = 5, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK6_INV', idx_lowest_bit = 4, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK6_SRC', idx_lowest_bit = 2, n_bits = 2, value = 0, ),
+                                          Element(name = 'CLK6_IDRV', idx_lowest_bit = 0, n_bits = 2, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'CLK7_Control', address = 23,
+                              elements = [Element(name = 'CLK7_PDN', idx_lowest_bit = 7, n_bits = 1, value = 0, ),
+                                          Element(name = 'FBB_INT', idx_lowest_bit = 6, n_bits = 1, value = 0, ),
+                                          Element(name = 'MS7_SRC', idx_lowest_bit = 5, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK7_INV', idx_lowest_bit = 4, n_bits = 1, value = 0, ),
+                                          Element(name = 'CLK7_SRC', idx_lowest_bit = 2, n_bits = 2, value = 0, ),
+                                          Element(name = 'CLK7_IDRV', idx_lowest_bit = 0, n_bits = 2, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'CLK3_0_Disable_State', address = 24,
+                              elements = [Element(name = 'CLK3_DIS_STATE', idx_lowest_bit = 6, n_bits = 2, value = 0, ),
+                                          Element(name = 'CLK2_DIS_STATE', idx_lowest_bit = 4, n_bits = 2, value = 0, ),
+                                          Element(name = 'CLK1_DIS_STATE', idx_lowest_bit = 2, n_bits = 2, value = 0, ),
+                                          Element(name = 'CLK0_DIS_STATE', idx_lowest_bit = 0, n_bits = 2, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth_NA_Parameters', address = 26,
+                              elements = [Element(name = 'MSNA_P3_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth_NA_Parameters', address = 27,
+                              elements = [Element(name = 'MSNA_P3_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth_NA_Parameters', address = 28,
+                              elements = [Element(name = 'Unused', idx_lowest_bit = 4, n_bits = 4, value = 0, ),
+                                          Element(name = 'Reserved_2', idx_lowest_bit = 2, n_bits = 2, value = 0,
+                                                  read_only = True, ),
+                                          Element(name = 'MSNA_P1_17_16', idx_lowest_bit = 0, n_bits = 2, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth_NA_Parameters', address = 29,
+                              elements = [Element(name = 'MSNA_P1_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth_NA_Parameters', address = 30,
+                              elements = [Element(name = 'MSNA_P1_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth_NA_Parameters', address = 31,
+                              elements = [Element(name = 'MSNA_P3_19_16', idx_lowest_bit = 4, n_bits = 4, value = 0, ),
+                                          Element(name = 'MSNA_P2_19_16', idx_lowest_bit = 0, n_bits = 4, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth_NA_Parameters', address = 32,
+                              elements = [Element(name = 'MSNA_P2_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth_NA_Parameters', address = 33,
+                              elements = [Element(name = 'MSNA_P2_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth_NB_Parameters', address = 34,
+                              elements = [Element(name = 'MSNB_P3_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth_NB_Parameters', address = 35,
+                              elements = [Element(name = 'MSNB_P3_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth_NB_Parameters', address = 36,
+                              elements = [Element(name = 'Unused', idx_lowest_bit = 4, n_bits = 4, value = 0, ),
+                                          Element(name = 'Reserved_2', idx_lowest_bit = 2, n_bits = 2, value = 0,
+                                                  read_only = True, ),
+                                          Element(name = 'MSNB_P1_17_16', idx_lowest_bit = 0, n_bits = 2, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth_NB_Parameters', address = 37,
+                              elements = [Element(name = 'MSNB_P1_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth_NB_Parameters', address = 38,
+                              elements = [Element(name = 'MSNB_P1_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth_NB_Parameters', address = 39,
+                              elements = [Element(name = 'MSNB_P3_19_16', idx_lowest_bit = 4, n_bits = 4, value = 0, ),
+                                          Element(name = 'MSNB_P2_19_16', idx_lowest_bit = 0, n_bits = 4, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth_NB_Parameters', address = 40,
+                              elements = [Element(name = 'MSNB_P2_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth_NB_Parameters', address = 41,
+                              elements = [Element(name = 'MSNB_P2_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth0_Parameters', address = 42,
+                              elements = [Element(name = 'MS0_P3_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth0_Parameters', address = 43,
+                              elements = [Element(name = 'MS0_P3_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth0_Parameters', address = 44,
+                              elements = [Element(name = 'Unused', idx_lowest_bit = 7, n_bits = 1, value = 0, ),
+                                          Element(name = 'R0_DIV', idx_lowest_bit = 4, n_bits = 3, value = 0, ),
+                                          Element(name = 'MS0_DIVBY4', idx_lowest_bit = 2, n_bits = 2, value = 0, ),
+                                          Element(name = 'MS0_P1_17_16', idx_lowest_bit = 0, n_bits = 2, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth0_Parameters', address = 45,
+                              elements = [Element(name = 'MS0_P1_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth0_Parameters', address = 46,
+                              elements = [Element(name = 'MS0_P1_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth0_Parameters', address = 47,
+                              elements = [Element(name = 'MS0_P3_19_16', idx_lowest_bit = 4, n_bits = 4, value = 0, ),
+                                          Element(name = 'MS0_P2_19_16', idx_lowest_bit = 0, n_bits = 4, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth0_Parameters', address = 48,
+                              elements = [Element(name = 'MS0_P2_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth0_Parameters', address = 49,
+                              elements = [Element(name = 'MS0_P2_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth1_Parameters', address = 50,
+                              elements = [Element(name = 'MS1_P3_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth1_Parameters', address = 51,
+                              elements = [Element(name = 'MS1_P3_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth1_Parameters', address = 52,
+                              elements = [Element(name = 'Unused', idx_lowest_bit = 7, n_bits = 1, value = 0, ),
+                                          Element(name = 'R1_DIV', idx_lowest_bit = 4, n_bits = 3, value = 0, ),
+                                          Element(name = 'MS1_DIVBY4', idx_lowest_bit = 2, n_bits = 2, value = 0, ),
+                                          Element(name = 'MS1_P1_17_16', idx_lowest_bit = 0, n_bits = 2, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth1_Parameters', address = 53,
+                              elements = [Element(name = 'MS1_P1_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth1_Parameters', address = 54,
+                              elements = [Element(name = 'MS1_P1_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth1_Parameters', address = 55,
+                              elements = [Element(name = 'MS1_P3_19_16', idx_lowest_bit = 4, n_bits = 4, value = 0, ),
+                                          Element(name = 'MS1_P2_19_16', idx_lowest_bit = 0, n_bits = 4, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth1_Parameters', address = 56,
+                              elements = [Element(name = 'MS1_P2_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth1_Parameters', address = 57,
+                              elements = [Element(name = 'MS1_P2_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth2_Parameters', address = 58,
+                              elements = [Element(name = 'MS2_P3_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth2_Parameters', address = 59,
+                              elements = [Element(name = 'MS2_P3_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth2_Parameters', address = 60,
+                              elements = [Element(name = 'Unused', idx_lowest_bit = 7, n_bits = 1, value = 0, ),
+                                          Element(name = 'R2_DIV', idx_lowest_bit = 4, n_bits = 3, value = 0, ),
+                                          Element(name = 'MS2_DIVBY4', idx_lowest_bit = 2, n_bits = 2, value = 0, ),
+                                          Element(name = 'MS2_P1_17_16', idx_lowest_bit = 0, n_bits = 2, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth2_Parameters', address = 61,
+                              elements = [Element(name = 'MS2_P1_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth2_Parameters', address = 62,
+                              elements = [Element(name = 'MS2_P1_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth2_Parameters', address = 63,
+                              elements = [Element(name = 'MS2_P3_19_16', idx_lowest_bit = 4, n_bits = 4, value = 0, ),
+                                          Element(name = 'MS2_P2_19_16', idx_lowest_bit = 0, n_bits = 4, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth2_Parameters', address = 64,
+                              elements = [Element(name = 'MS2_P2_15_8', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Multisynth2_Parameters', address = 65,
+                              elements = [Element(name = 'MS2_P2_7_0', idx_lowest_bit = 0, n_bits = 8, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'CLK0_Initial_Phase_Offset', address = 165,
+                              elements = [Element(name = 'Reserved_7', idx_lowest_bit = 7, n_bits = 1, value = 0,
+                                                  read_only = True, ),
+                                          Element(name = 'CLK0_PHOFF', idx_lowest_bit = 0, n_bits = 7, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'CLK1_Initial_Phase_Offset', address = 166,
+                              elements = [Element(name = 'Reserved_7', idx_lowest_bit = 7, n_bits = 1, value = 0,
+                                                  read_only = True, ),
+                                          Element(name = 'CLK1_PHOFF', idx_lowest_bit = 0, n_bits = 7, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'CLK2_Initial_Phase_Offset', address = 167,
+                              elements = [Element(name = 'Reserved_7', idx_lowest_bit = 7, n_bits = 1, value = 0,
+                                                  read_only = True, ),
+                                          Element(name = 'CLK2_PHOFF', idx_lowest_bit = 0, n_bits = 7, value = 0, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'PLL_Reset', address = 177,
+                              elements = [Element(name = 'PLLB_RST', idx_lowest_bit = 7, n_bits = 1, value = 0, ),
+                                          Element(name = 'Reserved_6', idx_lowest_bit = 6, n_bits = 1, value = 0,
+                                                  read_only = True, ),
+                                          Element(name = 'PLLA_RST', idx_lowest_bit = 5, n_bits = 1, value = 0, ),
+                                          Element(name = 'Reserved_0', idx_lowest_bit = 0, n_bits = 5, value = 0,
+                                                  read_only = True, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Crystal_Internal_Load_Capacitance', address = 183,
+                              elements = [Element(name = 'XTAL_CL', idx_lowest_bit = 6, n_bits = 2, value = 0, ),
+                                          Element(name = 'Reserved_0', idx_lowest_bit = 0, n_bits = 6, value = 0,
+                                                  read_only = True, ),
+                                          ], default_value = 0))
+
+    registers.append(Register(name = 'Fanout_Enable', address = 187,
+                              elements = [
+                                  Element(name = 'CLKIN_FANOUT_EN', idx_lowest_bit = 7, n_bits = 1, value = 0, ),
+                                  Element(name = 'XO_FANOUT_EN', idx_lowest_bit = 6, n_bits = 1, value = 0, ),
+                                  Element(name = 'Reserved_5', idx_lowest_bit = 5, n_bits = 1, value = 0,
+                                          read_only = True, ),
+                                  Element(name = 'MS_FANOUT_EN', idx_lowest_bit = 4, n_bits = 1, value = 0, ),
+                                  ], default_value = 0))
+
+    return registers

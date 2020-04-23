@@ -1,4 +1,5 @@
-from clock_generators.si535x.si5351 import Si5351A_B_GT
+# from clock_generators.si5351.si5351a import Si5351A_B_GT
+
 from utilities.adapters import peripherals
 
 
@@ -14,14 +15,21 @@ registers_values = [(0, 0), (1, 0), (2, 0), (3, 0), (9, 0), (15, 0), (16, 79), (
                     (162, 0), (163, 0), (164, 0), (165, 0), (166, 0), (167, 0), (168, 0), (169, 0), (170, 0),
                     (177, 160), (183, 210), (187, 208)]
 
-with_hardware_device = True
+
+
+with_hardware_device = False
 
 if with_hardware_device:
     _i2c = peripherals.I2C.get_Ftdi_i2c()
 else:
     _i2c = None  # using None for testing without actual hardware device.
 
-si = Si5351A_B_GT(_i2c)
+from clock_generators.si5351 import Si5351
+si = Si5351(_i2c)
+
+# from clock_generators.si5351.si5351a import Si5351A_B_GT
+# si = Si5351A_B_GT(_i2c)
+
 # si.print_registers_values()
 # si.enable(False)
 si.init()
@@ -31,7 +39,7 @@ xtal = si.xtal
 pll = si.plls['A']
 ms = si.multisynths[0]
 clk = si.clocks[0]
-ss = si.spread_spectrum
+# ss = si.spread_spectrum
 
 # clk.set_phase(75)
 # print(clk.phase)
