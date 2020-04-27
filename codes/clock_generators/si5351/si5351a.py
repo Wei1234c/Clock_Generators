@@ -103,10 +103,9 @@ class Si5351A_B_GT(Device):
             self._si = si
             self._idx = idx
 
-            # set divider first, source second.
             self.denominator_max = denominator_max
-            self._set_divider(self.DIVIDER_DEFAULT)
             self._source = None
+            self._set_divider(self.DIVIDER_DEFAULT)
             # self.set_input_source()  # need implement
 
 
@@ -244,7 +243,14 @@ class Si5351A_B_GT(Device):
 
 
         def _post_set_divider(self):
-            pass
+            self._maintain_phase_offset()
+
+
+        def _maintain_phase_offset(self):
+            if self.pll:
+                # https://groups.io/g/BITX20/topic/si5351a_facts_and_myths/5430607
+                # need to reset PLL in order to synch phases of outputs.
+                self.pll.reset()
 
 
     class _PLL(_MultisynthBase):
@@ -264,7 +270,7 @@ class Si5351A_B_GT(Device):
 
         def __init__(self, si, name, xtal_as_source = True):
             self._name = name
-            super().__init__(si, self.NAMES[name])
+            super().__init__(si, idx = self.NAMES[name])
             self._xtal_as_source = xtal_as_source
             self.init()
 
@@ -463,9 +469,6 @@ class Si5351A_B_GT(Device):
 
             self._post_set_divider()
 
-            if self.pll:
-                self.pll.reset()  # need to reset PLL after switching mode.
-
 
     class _Clock(_MultisynthBase):
 
@@ -490,6 +493,7 @@ class Si5351A_B_GT(Device):
             self._set_disable_state(disable_state)
             self.set_input_source(source)
             self.set_frequency(self._si.FREQ_REF if freq is None else freq)
+            self.set_phase(PHASE_DEFAULT)
 
 
         @property
@@ -672,16 +676,6 @@ class Si5351A_B_GT(Device):
             self._si._write_element_by_name('R{}_DIV'.format(self._idx), self.R_DIVIDERs[divider])
 
 
-        def _post_set_divider(self):
-            self._maintain_phase_offset()
-
-
-        def _maintain_phase_offset(self):
-            if self.phase_offset_enabled:  # https://groups.io/g/BITX20/topic/si5351a_facts_and_myths/5430607
-                if self.pll:
-                    self.pll.reset()
-
-
         @property
         def phase_offset_enabled(self):
             if self._idx in range(self.N_MULTISYNTHS_WITH_OUTPUT_SKEW):
@@ -691,13 +685,6 @@ class Si5351A_B_GT(Device):
 
         def set_phase(self, phase):
             self._action = 'set_phase {} idx {}'.format(phase, self._idx)
-            my_period = 1 / self.freq
-            offset_seconds = (phase % DEGREES_IN_PI2) / DEGREES_IN_PI2 * my_period
-            self.set_phase_offset(offset_seconds)
-
-
-        def set_phase_offset(self, offset_seconds = 0):
-            self._si._action = 'set_phase_offset {}'.format(offset_seconds)
 
             # Set offset_seconds = 0 to disable it.
             #
@@ -713,18 +700,33 @@ class Si5351A_B_GT(Device):
             # CLKx_PHOFF[4:0] = Round(DesiredOffset(sec) * 4 * FVCO)
             # ==> typo, should be [6:0]
 
-            if self._idx in range(self.N_MULTISYNTHS_WITH_OUTPUT_SKEW):
-                if self.multisynth is not None:
-                    self._si.multisynths[self._idx]._set_integer_mode(False)
+            if self._idx in range(self.N_MULTISYNTHS_WITH_OUTPUT_SKEW) and self.multisynth is not None:
 
-                    freq_vco = self.pll.freq  # PLL
-                    offset = int(round(offset_seconds * 4 * freq_vco))
-                    self._set_phase_offset(offset)
+                cycle = (phase % DEGREES_IN_PI2) / DEGREES_IN_PI2
+                freq_vco = self.pll.freq  # PLL
+
+                freq_min = cycle * freq_vco * 4 / (2 ** 7 - 0.5)  # CLKx_PHOFF has 7 bits, must < 128 after rounded.
+                assert self.freq > freq_min, \
+                    'my freq must be greater than {:0.3e} to have {} degree phase offset.'.format(freq_min, phase)
+
+                my_period = 1 / self.freq
+                offset_seconds = cycle * my_period
+                offset = int(round(offset_seconds * 4 * freq_vco))
+                self._set_phase_offset(offset)
+
+                if phase != 0:
+                    self.multisynth._set_integer_mode(False)
+                else:
+                    self.multisynth.restore_frequency()  # restore integer mode if applicable.
+
+                self._maintain_phase_offset()  # need to reset PLL
 
 
         @property
         def phase_offset(self):
-            return self._si.map.elements['CLK{}_PHOFF'.format(self._idx)]['element'].value
+            if self._idx in range(self.N_MULTISYNTHS_WITH_OUTPUT_SKEW) and self.multisynth is not None:
+                return self._si.map.elements['CLK{}_PHOFF'.format(self._idx)]['element'].value
+            return 0
 
 
         @property
@@ -739,6 +741,8 @@ class Si5351A_B_GT(Device):
         def _set_phase_offset(self, offset = 0):
             # CLKx_PHOFF[6:0] is an unsigned integer with one LSB equivalent to a time delay of
             # Tvco/4, where Tvco is the period of the VCO/PLL associated with this output.
+
+            # assert 0 <= offset < 2 ** 7, 'offset ({}) should be less than 128.'.format(offset)
 
             self._si._write_element_by_name('CLK{}_PHOFF'.format(self._idx), offset & 0x7F)
 
@@ -926,8 +930,8 @@ class Si5351A_B_GT(Device):
         for i in self.channels_in_use:
             self.clocks[i].power_down(False)  # Just power up clocks in use.
 
-        self.reset_plls()
         self.start()
+        self.reset_plls()
 
 
     def reset_plls(self):
