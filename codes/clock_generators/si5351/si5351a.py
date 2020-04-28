@@ -980,6 +980,74 @@ class Si5351A_B_GT(Device):
                     print(e)
 
 
+    @property
+    def registers_values(self):
+        return self.map.addressed_values
+
+
+    @property
+    def revision(self):
+        if not self.is_virtual_device:
+            return self.status.elements['REVID'].value
+        return 0
+
+
+    @property
+    def status(self):
+        return self._read_register_by_name('Device_Status')
+
+
+    @property
+    def ready(self):
+        if not self.is_virtual_device:
+            return self.status.elements['SYS_INIT'].value == 0
+        return True
+
+
+    @property
+    def is_virtual_device(self):
+        return self._i2c._i2c is None
+
+
+    @property
+    def current_configuration(self):
+        import pandas as pd
+
+        df_clkin = pd.DataFrame([self.clkin.status])
+        df_xtal = pd.DataFrame([self.xtal.status])
+        df_plls = pd.DataFrame([self.plls[i].status for i in self._PLL.NAMES.keys()])
+        df_multisynths = pd.DataFrame([self.multisynths[i].status for i in range(self.n_channels)])
+        df_clocks = pd.DataFrame([self.clocks[i].status for i in range(self.n_channels)])
+
+        df = pd.merge(df_xtal, df_plls, how = 'outer',
+                      left_on = ['type', 'idx'], right_on = ['source_type', 'source_idx'],
+                      suffixes = ('_xtal', '_pll'))
+        df.drop(columns = ['source_type', 'source_idx', 'source_freq'], inplace = True)
+
+        df = pd.merge(df, df_multisynths, how = 'outer',
+                      left_on = ['type_pll', 'idx_pll'], right_on = ['source_type', 'source_idx'],
+                      suffixes = ('_pll', '_multisynth'))
+        df.drop(columns = ['source_type', 'source_idx', 'source_freq'], inplace = True)
+
+        df = pd.merge(df, df_clocks, how = 'outer',
+                      left_on = ['type', 'idx'], right_on = ['source_type', 'source_idx'],
+                      suffixes = ('_multisynth', '_clock'))
+        df.drop(columns = ['type_pll', 'type_multisynth', 'type_clock', 'source_type', 'source_idx', 'source_freq'],
+                inplace = True)
+
+        df.columns = ['mclk_type', 'mclk_idx', 'mclk_freq', 'pll_idx', 'pll_freq', 'pll_divider', 'multisynth_idx',
+                      'multisynth_freq', 'multisynth_divider', 'multisynth_in_integer_mode', 'multisynth_divided_by_4',
+                      'clock_idx', 'clock_freq', 'clock_divider', 'power_downed', 'enabled', 'oeb_pin_masked',
+                      'phase_offset_enabled', 'phase']
+
+        df = df.reindex(
+            columns = ['mclk_type', 'mclk_idx', 'mclk_freq', 'pll_idx', 'pll_divider', 'pll_freq', 'multisynth_idx',
+                       'multisynth_divider', 'multisynth_freq', 'multisynth_in_integer_mode', 'multisynth_divided_by_4',
+                       'clock_idx', 'clock_divider', 'clock_freq', 'power_downed', 'enabled', 'oeb_pin_masked',
+                       'phase_offset_enabled', 'phase'])
+        return df
+
+
     def find_integer_dividers(self, freq_desired, even_only = True, torance_hz = 1, freq_ref = FREQ_REF):
 
         # hierachy structure
@@ -1026,74 +1094,6 @@ class Si5351A_B_GT(Device):
         freqs_pll_dividers = [set([row[0][0] for row in freq_matches]) for freq_matches in freqs_matches]
         common_pll_dividers = set.intersection(*freqs_pll_dividers)
         return common_pll_dividers, freqs_pll_dividers, freqs_matches
-
-
-    @property
-    def registers_values(self):
-        return self.map.addressed_values
-
-
-    @property
-    def revision(self):
-        if not self.is_virtual_device:
-            return self.status.elements['REVID'].value
-        return 0
-
-
-    @property
-    def status(self):
-        return self._read_register_by_name('Device_Status')
-
-
-    @property
-    def current_configuration(self):
-        import pandas as pd
-
-        df_clkin = pd.DataFrame([self.clkin.status])
-        df_xtal = pd.DataFrame([self.xtal.status])
-        df_plls = pd.DataFrame([self.plls[i].status for i in self._PLL.NAMES.keys()])
-        df_multisynths = pd.DataFrame([self.multisynths[i].status for i in range(self.n_channels)])
-        df_clocks = pd.DataFrame([self.clocks[i].status for i in range(self.n_channels)])
-
-        df = pd.merge(df_xtal, df_plls, how = 'outer',
-                      left_on = ['type', 'idx'], right_on = ['source_type', 'source_idx'],
-                      suffixes = ('_xtal', '_pll'))
-        df.drop(columns = ['source_type', 'source_idx', 'source_freq'], inplace = True)
-
-        df = pd.merge(df, df_multisynths, how = 'outer',
-                      left_on = ['type_pll', 'idx_pll'], right_on = ['source_type', 'source_idx'],
-                      suffixes = ('_pll', '_multisynth'))
-        df.drop(columns = ['source_type', 'source_idx', 'source_freq'], inplace = True)
-
-        df = pd.merge(df, df_clocks, how = 'outer',
-                      left_on = ['type', 'idx'], right_on = ['source_type', 'source_idx'],
-                      suffixes = ('_multisynth', '_clock'))
-        df.drop(columns = ['type_pll', 'type_multisynth', 'type_clock', 'source_type', 'source_idx', 'source_freq'],
-                inplace = True)
-
-        df.columns = ['mclk_type', 'mclk_idx', 'mclk_freq', 'pll_idx', 'pll_freq', 'pll_divider', 'multisynth_idx',
-                      'multisynth_freq', 'multisynth_divider', 'multisynth_in_integer_mode', 'multisynth_divided_by_4',
-                      'clock_idx', 'clock_freq', 'clock_divider', 'power_downed', 'enabled', 'oeb_pin_masked',
-                      'phase_offset_enabled', 'phase']
-
-        df = df.reindex(
-            columns = ['mclk_type', 'mclk_idx', 'mclk_freq', 'pll_idx', 'pll_divider', 'pll_freq', 'multisynth_idx',
-                       'multisynth_divider', 'multisynth_freq', 'multisynth_in_integer_mode', 'multisynth_divided_by_4',
-                       'clock_idx', 'clock_divider', 'clock_freq', 'power_downed', 'enabled', 'oeb_pin_masked',
-                       'phase_offset_enabled', 'phase'])
-        return df
-
-
-    @property
-    def ready(self):
-        if not self.is_virtual_device:
-            return self.status.elements['SYS_INIT'].value == 0
-        return True
-
-
-    @property
-    def is_virtual_device(self):
-        return self._i2c._i2c is None
 
 
     # =================================================================
