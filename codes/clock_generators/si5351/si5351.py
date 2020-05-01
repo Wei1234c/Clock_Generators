@@ -134,7 +134,7 @@ class Si5351(Si5351A_B_GT):
 
         @property
         def mode(self):
-            return self.MODES_value_key[self._si.map.elements['SSC_MODE']['element'].value]
+            return self.MODES_value_key[self._si.map.value_of_element('SSC_MODE')]
 
 
         @property
@@ -144,7 +144,7 @@ class Si5351(Si5351A_B_GT):
 
         @property
         def enabled(self):
-            return self._si.map.elements['SSC_EN']['element'].value == 1
+            return self._si.map.value_of_element('SSC_EN') == 1
 
 
         def enable(self, value = True, mode = 'center', ssc_amp = 0.01):
@@ -286,3 +286,90 @@ class Si5351(Si5351A_B_GT):
         self.spread_spectrum = self._SpreadSpectrum(self)  # PLL_A as source
         if self.HAS_VCXO:
             self.vcxo = self._VCXO(self)  # PLL_B as source, changes PLL_B's denominator(P3) if used.
+
+
+    @property
+    def current_configuration(self):
+        import pandas as pd
+
+        df_clkin = pd.DataFrame([self.clkin.status])
+        df_xtal = pd.DataFrame([self.xtal.status])
+        df_plls = pd.DataFrame([self.plls[i].status for i in self._PLL.NAMES.keys()])
+        df_multisynths = pd.DataFrame([self.multisynths[i].status for i in range(self.n_channels)])
+        df_clocks = pd.DataFrame([self.clocks[i].status for i in range(self.n_channels)])
+
+        df = pd.merge(df_xtal, df_plls, how = 'outer',
+                      left_on = ['type', 'idx'], right_on = ['source_type', 'source_idx'],
+                      suffixes = ('_xtal', '_pll'))
+        df.drop(columns = ['source_type', 'source_idx', 'source_freq'], inplace = True)
+
+        df = pd.merge(df, df_multisynths, how = 'outer',
+                      left_on = ['type_pll', 'idx_pll'], right_on = ['source_type', 'source_idx'],
+                      suffixes = ('_pll', '_multisynth'))
+        df.drop(columns = ['source_type', 'source_idx', 'source_freq'], inplace = True)
+
+        df = pd.merge(df, df_clocks, how = 'outer',
+                      left_on = ['type', 'idx'], right_on = ['source_type', 'source_idx'],
+                      suffixes = ('_multisynth', '_clock'))
+        df.drop(columns = ['type_pll', 'type_multisynth', 'type_clock', 'source_type', 'source_idx', 'source_freq'],
+                inplace = True)
+
+        df.columns = ['mclk_type', 'mclk_idx', 'mclk_freq', 'pll_idx', 'pll_freq', 'pll_divider', 'multisynth_idx',
+                      'multisynth_freq', 'multisynth_divider', 'multisynth_in_integer_mode', 'multisynth_divided_by_4',
+                      'clock_idx', 'clock_freq', 'clock_divider', 'power_downed', 'enabled', 'oeb_pin_masked',
+                      'phase_offset_enabled', 'phase']
+
+        df = df.reindex(
+            columns = ['mclk_type', 'mclk_idx', 'mclk_freq', 'pll_idx', 'pll_divider', 'pll_freq', 'multisynth_idx',
+                       'multisynth_divider', 'multisynth_freq', 'multisynth_in_integer_mode', 'multisynth_divided_by_4',
+                       'clock_idx', 'clock_divider', 'clock_freq', 'power_downed', 'enabled', 'oeb_pin_masked',
+                       'phase_offset_enabled', 'phase'])
+        return df
+
+
+    def find_integer_dividers(self, freq_desired, even_only = True, torance_hz = 1, freq_ref = Si5351A_B_GT.FREQ_REF):
+
+        # hierachy structure
+        xtal = self._Xtal(self, freq_ref)
+        pll = self._PLL(self, 'A')
+        multisynth = self._Multisynth(self, 0)
+        clock = self._Clock(self, 0)
+
+        pll._source = xtal
+        multisynth._source = pll
+        clock._source = multisynth
+
+        # possible dividers
+        divider_plls = range(pll.DIVIDER_MIN, pll.DIVIDER_MAX + 1)
+        divider_multisynths = range(multisynth.DIVIDER_MIN, multisynth.DIVIDER_MAX + 1)
+        divider_rs = list(self._Clock.R_DIVIDERs.keys())
+
+        results = []
+
+        for dp in divider_plls:
+            for dm in divider_multisynths:
+                for dr in divider_rs:
+                    try:
+                        if even_only:
+                            assert dp % 2 == 0 and dm % 2 == 0
+
+                        pll._divider = dp
+                        multisynth._divider = dm
+                        clock._divider = dr
+
+                        freq_clock = clock.freq  # validate
+                        diff = abs(freq_clock - freq_desired)
+
+                        if diff < torance_hz:
+                            match = ((dp, dm, dr), (xtal.freq, pll.freq, multisynth.freq, clock.freq))
+                            results.append(match)
+                    except:
+                        pass
+        return results
+
+
+    def find_integer_pll_dividers_for_clocks(self, desired_clock_freqs, *args, **kwargs):
+        freqs_matches = [self.find_integer_dividers(freq, *args, **kwargs) for freq in desired_clock_freqs]
+        freqs_pll_dividers = [set([row[0][0] for row in freq_matches]) for freq_matches in freqs_matches]
+        common_pll_dividers = set.intersection(*freqs_pll_dividers)
+        return common_pll_dividers, freqs_pll_dividers, freqs_matches

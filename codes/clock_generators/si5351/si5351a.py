@@ -347,7 +347,7 @@ class Si5351A_B_GT(Device):
 
         @property
         def is_in_integer_mode(self):
-            return self._si.map.elements['FB{}_INT'.format(self._name)]['element'].value == 1
+            return self._si.map.value_of_element('FB{}_INT'.format(self._name)) == 1
 
 
         def _set_integer_mode(self, value = True):
@@ -431,7 +431,7 @@ class Si5351A_B_GT(Device):
             if self._idx in self.INTEGER_ONLY_MULTISYNTHS:
                 return True
             if self._idx in range(self.N_HIGH_FREQUENCY_MULTISYNTHS):
-                return self._si.map.elements['MS{}_INT'.format(self._idx)]['element'].value == 1
+                return self._si.map.value_of_element('MS{}_INT'.format(self._idx)) == 1
             return False
 
 
@@ -443,7 +443,7 @@ class Si5351A_B_GT(Device):
         @property
         def is_divided_by_4(self):
             if self._idx in range(self.N_HIGH_FREQUENCY_MULTISYNTHS):
-                return self._si.map.elements['MS{}_DIVBY4'.format(self._idx)]['element'].value == 0x03
+                return self._si.map.value_of_element('MS{}_DIVBY4'.format(self._idx)) == 0x03
             return False
 
 
@@ -605,7 +605,7 @@ class Si5351A_B_GT(Device):
 
         @property
         def enabled(self):
-            return self._si.map.elements['CLK{}_OEB'.format(self._idx)]['element'].value == 0
+            return self._si.map.value_of_element('CLK{}_OEB'.format(self._idx)) == 0
 
 
         def enable(self, value = True):
@@ -616,7 +616,7 @@ class Si5351A_B_GT(Device):
 
         @property
         def power_downed(self):
-            return self._si.map.elements['CLK{}_PDN'.format(self._idx)]['element'].value == 1
+            return self._si.map.value_of_element('CLK{}_PDN'.format(self._idx)) == 1
 
 
         def power_down(self, value = True):
@@ -633,7 +633,7 @@ class Si5351A_B_GT(Device):
 
         @property
         def oeb_pin_masked(self):
-            return self._si.map.elements['OEB_MASK_{}'.format(self._idx)]['element'].value == 1
+            return self._si.map.value_of_element('OEB_MASK_{}'.format(self._idx)) == 1
 
 
         @property
@@ -679,7 +679,7 @@ class Si5351A_B_GT(Device):
         @property
         def phase_offset_enabled(self):
             if self._idx in range(self.N_MULTISYNTHS_WITH_OUTPUT_SKEW):
-                return self._si.map.elements['CLK{}_PHOFF'.format(self._idx)]['element'].value != 0
+                return self._si.map.value_of_element('CLK{}_PHOFF'.format(self._idx)) != 0
             return False
 
 
@@ -725,7 +725,7 @@ class Si5351A_B_GT(Device):
         @property
         def phase_offset(self):
             if self._idx in range(self.N_MULTISYNTHS_WITH_OUTPUT_SKEW) and self.multisynth is not None:
-                return self._si.map.elements['CLK{}_PHOFF'.format(self._idx)]['element'].value
+                return self._si.map.value_of_element('CLK{}_PHOFF'.format(self._idx))
             return 0
 
 
@@ -915,7 +915,7 @@ class Si5351A_B_GT(Device):
         # step 6: define output skews
         #     Out0
         #         desired skew 6ns  ==> Actual_Skew = 6.127ns,  CLK0_PHOFF = 0x16
-        # self.clocks[0].set_phase_offset(6.127e-9)
+        # self.clocks[0]._set_phase_offset(6.127e-9)
 
         #     Out1
         #     ...
@@ -1006,94 +1006,7 @@ class Si5351A_B_GT(Device):
 
     @property
     def is_virtual_device(self):
-        return self._i2c._i2c is None
-
-
-    @property
-    def current_configuration(self):
-        import pandas as pd
-
-        df_clkin = pd.DataFrame([self.clkin.status])
-        df_xtal = pd.DataFrame([self.xtal.status])
-        df_plls = pd.DataFrame([self.plls[i].status for i in self._PLL.NAMES.keys()])
-        df_multisynths = pd.DataFrame([self.multisynths[i].status for i in range(self.n_channels)])
-        df_clocks = pd.DataFrame([self.clocks[i].status for i in range(self.n_channels)])
-
-        df = pd.merge(df_xtal, df_plls, how = 'outer',
-                      left_on = ['type', 'idx'], right_on = ['source_type', 'source_idx'],
-                      suffixes = ('_xtal', '_pll'))
-        df.drop(columns = ['source_type', 'source_idx', 'source_freq'], inplace = True)
-
-        df = pd.merge(df, df_multisynths, how = 'outer',
-                      left_on = ['type_pll', 'idx_pll'], right_on = ['source_type', 'source_idx'],
-                      suffixes = ('_pll', '_multisynth'))
-        df.drop(columns = ['source_type', 'source_idx', 'source_freq'], inplace = True)
-
-        df = pd.merge(df, df_clocks, how = 'outer',
-                      left_on = ['type', 'idx'], right_on = ['source_type', 'source_idx'],
-                      suffixes = ('_multisynth', '_clock'))
-        df.drop(columns = ['type_pll', 'type_multisynth', 'type_clock', 'source_type', 'source_idx', 'source_freq'],
-                inplace = True)
-
-        df.columns = ['mclk_type', 'mclk_idx', 'mclk_freq', 'pll_idx', 'pll_freq', 'pll_divider', 'multisynth_idx',
-                      'multisynth_freq', 'multisynth_divider', 'multisynth_in_integer_mode', 'multisynth_divided_by_4',
-                      'clock_idx', 'clock_freq', 'clock_divider', 'power_downed', 'enabled', 'oeb_pin_masked',
-                      'phase_offset_enabled', 'phase']
-
-        df = df.reindex(
-            columns = ['mclk_type', 'mclk_idx', 'mclk_freq', 'pll_idx', 'pll_divider', 'pll_freq', 'multisynth_idx',
-                       'multisynth_divider', 'multisynth_freq', 'multisynth_in_integer_mode', 'multisynth_divided_by_4',
-                       'clock_idx', 'clock_divider', 'clock_freq', 'power_downed', 'enabled', 'oeb_pin_masked',
-                       'phase_offset_enabled', 'phase'])
-        return df
-
-
-    def find_integer_dividers(self, freq_desired, even_only = True, torance_hz = 1, freq_ref = FREQ_REF):
-
-        # hierachy structure
-        xtal = self._Xtal(self, freq_ref)
-        pll = self._PLL(self, 'A')
-        multisynth = self._Multisynth(self, 0)
-        clock = self._Clock(self, 0)
-
-        pll._source = xtal
-        multisynth._source = pll
-        clock._source = multisynth
-
-        # possible dividers
-        divider_plls = range(pll.DIVIDER_MIN, pll.DIVIDER_MAX + 1)
-        divider_multisynths = range(multisynth.DIVIDER_MIN, multisynth.DIVIDER_MAX + 1)
-        divider_rs = list(self._Clock.R_DIVIDERs.keys())
-
-        results = []
-
-        for dp in divider_plls:
-            for dm in divider_multisynths:
-                for dr in divider_rs:
-                    try:
-                        if even_only:
-                            assert dp % 2 == 0 and dm % 2 == 0
-
-                        pll._divider = dp
-                        multisynth._divider = dm
-                        clock._divider = dr
-
-                        freq_clock = clock.freq  # validate
-                        diff = abs(freq_clock - freq_desired)
-
-                        if diff < torance_hz:
-                            match = ((dp, dm, dr), (xtal.freq, pll.freq, multisynth.freq, clock.freq))
-                            results.append(match)
-                    except:
-                        pass
-        return results
-
-
-    def find_integer_pll_dividers_for_clocks(self, desired_clock_freqs, *args, **kwargs):
-        freqs_matches = [self.find_integer_dividers(freq, *args, **kwargs) for freq in desired_clock_freqs]
-        freqs_pll_dividers = [set([row[0][0] for row in freq_matches]) for freq_matches in freqs_matches]
-        common_pll_dividers = set.intersection(*freqs_pll_dividers)
-        return common_pll_dividers, freqs_pll_dividers, freqs_matches
+        return self._i2c.is_virtual_device
 
 
     # =================================================================

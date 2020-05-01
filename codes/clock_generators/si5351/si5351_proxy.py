@@ -5,7 +5,7 @@ except:
 
 
 
-class Si5351_mini:
+class Si5351_proxy:
     I2C_ADDRESS = 0x60
     N_REGISTERS = 188
     OUTPUT_ENABLE_CONTROL_ADDRESS = 3
