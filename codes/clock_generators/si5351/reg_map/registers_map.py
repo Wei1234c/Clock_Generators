@@ -647,7 +647,7 @@ def _get_all_registers():
                                      description = 'R7 Output Divider. 000b: Divide by 1 001b: Divide by 2'),
                              Element(name = 'Reserved_3', idx_lowest_bit = 3, n_bits = 1, value = 0, read_only = True,
                                      description = 'Leave as default.'),
-                             Element(name = 'R6_DIV', idx_lowest_bit = 0, n_bits = 2, value = 0,
+                             Element(name = 'R6_DIV', idx_lowest_bit = 0, n_bits = 3, value = 0,
                                      description = 'R6 Output Divider. 000b: Divide by 1 001b: Divide by 2'),
                              ], default_value = 0))
 
@@ -836,8 +836,8 @@ def _get_all_registers():
                                                   read_only = True, description = 'Reserved.'),
                                           Element(name = 'MS_FANOUT_EN', idx_lowest_bit = 4, n_bits = 1, value = 0,
                                                   description = 'Enable fanout of Multisynth0 and Multisynth4 to all output multiplexers. Set this bit to 1b.'),
+                                          Element(name = 'Reserved_0', idx_lowest_bit = 0, n_bits = 4, value = 0,
+                                                  read_only = True, description = 'Reserved'),
                                           ], default_value = 0))
 
     return registers
-
-

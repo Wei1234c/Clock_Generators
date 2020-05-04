@@ -353,6 +353,8 @@ def _get_all_registers():
                                   Element(name = 'Reserved_5', idx_lowest_bit = 5, n_bits = 1, value = 0,
                                           read_only = True, ),
                                   Element(name = 'MS_FANOUT_EN', idx_lowest_bit = 4, n_bits = 1, value = 0, ),
+                                  Element(name = 'Reserved_0', idx_lowest_bit = 0, n_bits = 4, value = 0,
+                                          read_only = True, ),
                                   ], default_value = 0))
 
     return registers
