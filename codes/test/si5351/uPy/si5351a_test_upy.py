@@ -1,4 +1,5 @@
 from peripherals import I2C
+from si5351a import Si5351A_B_GT
 
 
 with_hardware_device = True
@@ -8,12 +9,11 @@ if with_hardware_device:
 else:
     _i2c = None  # using None for testing without actual hardware device.
 
-from si5351a import Si5351A_B_GT
+bus = I2C(_i2c)
+si = Si5351A_B_GT(bus)
 
-
-si = Si5351A_B_GT(_i2c)
 si.enable(False)
-
 clk = si.clocks[0]
 clk.enable(True)
+print(si.multisynths[1].status)
 print(clk.status)

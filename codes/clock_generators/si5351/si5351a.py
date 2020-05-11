@@ -7,12 +7,10 @@
 try:
     from collections import OrderedDict
     from ..interfaces import *
-    from utilities.adapters.peripherals import I2C
     from .reg_map.map_manager import _get_registers_map
 except:
     from collections import OrderedDict
     from interfaces import *
-    from peripherals import I2C
     from map_manager import _get_registers_map
 
 
@@ -585,8 +583,9 @@ class Si5351A_B_GT(Device):
                                     return True
 
                             except AssertionError as e:
-                                print('Failed in setting multisynth {} to freq {} x {} = {}.'.format(
-                                    self.multisynth._idx, freq, d, freq * d))
+                                if self._si.DEBUG_MODE:
+                                    print('Failed in setting multisynth {} to freq {} x {} = {}.'.format(
+                                        self.multisynth._idx, freq, d, freq * d))
 
             else:  # source (Xtalk, Clkin) with fixed frequency
                 for d in self.R_DIVIDERs.keys():
@@ -842,7 +841,7 @@ class Si5351A_B_GT(Device):
             self._si._write_element_by_name('XO_FANOUT_EN', 1 if value else 0)
 
 
-    def __init__(self, i2c = None, i2c_address = I2C_ADDRESS, pin_oeb = None, pin_ssen = None,
+    def __init__(self, bus, i2c_address = I2C_ADDRESS, pin_oeb = None, pin_ssen = None,
                  n_channels = None, channels_in_use = None,
                  freq_xtal = FREQ_REF, freq_clkin = FREQ_REF, freq_vcxo = FREQ_REF,
                  registers_map = None, registers_values = None,
@@ -855,7 +854,8 @@ class Si5351A_B_GT(Device):
                          registers_map = registers_map, registers_values = registers_values,
                          commands = commands)
 
-        self._i2c = I2C(i2c, i2c_address)
+        self._bus = bus
+        self._i2c_address = i2c_address
         self._pin_oeb = pin_oeb
         self._pin_ssen = pin_ssen
 
@@ -1006,7 +1006,7 @@ class Si5351A_B_GT(Device):
 
     @property
     def is_virtual_device(self):
-        return self._i2c.is_virtual_device
+        return self._bus.is_virtual_device
 
 
     # =================================================================
@@ -1026,11 +1026,11 @@ class Si5351A_B_GT(Device):
     def _write_register(self, register, reset = False):
         if register.address not in self.READ_ONLY_REGISTERS:
             super()._write_register(register, reset = reset)
-            return self._i2c.write_byte(register.address, register.value)
+            return self._bus.write_byte(self._i2c_address, register.address, register.value)
 
 
     def _read_register(self, register):
-        value = self._i2c.read_byte(register.address)
+        value = self._bus.read_byte(self._i2c_address, register.address)
         self._show_bus_data(bytes([value]), address = register.address, reading = True)
         self._print_register(register)
         return value

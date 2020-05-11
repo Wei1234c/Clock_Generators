@@ -11,9 +11,9 @@ class Si5351_proxy:
     OUTPUT_ENABLE_CONTROL_ADDRESS = 3
 
 
-    def __init__(self, i2c, i2c_address = I2C_ADDRESS, registers_values = None):
+    def __init__(self, bus, i2c_address = I2C_ADDRESS, registers_values = None):
 
-        self._i2c = I2C(i2c, i2c_address)
+        self._bus = bus
         self._i2c_address = i2c_address
 
         self.enable(False)
@@ -34,12 +34,12 @@ class Si5351_proxy:
         self.write_register(self.OUTPUT_ENABLE_CONTROL_ADDRESS, 0x00 if value else 0xFF)
 
 
-    def read_register(self, address):
-        return self._read_byte(address)
+    def read_register(self, reg_address):
+        return self._bus.read_byte(self._i2c_address, reg_address)
 
 
-    def write_register(self, address, value):
-        return self._write_byte(address, value)
+    def write_register(self, reg_address, value):
+        return self._bus.write_byte(self._i2c_address, reg_address, value)
 
 
     def read_all_registers(self):
@@ -59,12 +59,3 @@ class Si5351_proxy:
                 self.write_register(address, value)
             except:
                 pass
-
-
-    # =============================
-    def _read_byte(self, reg_address):
-        return self._i2c.read_byte(reg_address)
-
-
-    def _write_byte(self, reg_address, value):
-        return self._i2c._write_byte(reg_address, value)

@@ -1,15 +1,15 @@
-import peripherals
+from peripherals import I2C
 from si5351_proxy import Si5351_proxy
 
 
 with_hardware_device = True
 
 if with_hardware_device:
-    _i2c = peripherals.I2C.get_uPy_i2c(scl_pin_id = 5, sda_pin_id = 4, freq = 400000)
+    _i2c = I2C.get_uPy_i2c(scl_pin_id = 5, sda_pin_id = 4, freq = 400000)
 else:
     _i2c = None  # using None for testing without actual hardware device.
 
-# si = Si5351_proxy(_i2c)
+bus = I2C(_i2c)
 
 registers_values = [(0, 0), (1, 0), (2, 0), (3, 0), (9, 0), (15, 0), (16, 79), (17, 79), (18, 79), (19, 79), (20, 79),
                     (21, 79), (22, 79), (23, 79), (24, 0), (25, 0), (26, 0), (27, 1), (28, 0), (29, 16), (30, 0),
@@ -23,4 +23,4 @@ registers_values = [(0, 0), (1, 0), (2, 0), (3, 0), (9, 0), (15, 0), (16, 79), (
                     (162, 0), (163, 0), (164, 0), (165, 0), (166, 0), (167, 0), (168, 0), (169, 0), (170, 0),
                     (177, 160), (183, 210), (187, 208)]
 
-si = Si5351_proxy(_i2c, registers_values = registers_values)
+si = Si5351_proxy(bus, registers_values = registers_values)
