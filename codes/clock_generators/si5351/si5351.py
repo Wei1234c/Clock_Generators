@@ -85,7 +85,7 @@ class Si5351(Si5351A_B_GT):
             a = int(pll_divider)
             b = self.DENOMINATOR_MAX * (pll_divider - a)
             c = self.DENOMINATOR_MAX
-            vcxo_p = math.floor(1.03 * (128 * a + b / c) * apr_ppm)
+            vcxo_p = round(1.03 * (128 * a + b / c) * apr_ppm)
 
             bits_ranges = ((21, 16), (15, 8), (7, 0))
 
@@ -201,7 +201,7 @@ class Si5351(Si5351A_B_GT):
 
             ssdn = 64 * self.pll.divider * ssc_amp / ((1 + ssc_amp) * ssudp)
             ssdn_p1 = math.floor(ssdn)
-            ssdn_p2 = math.floor(self.DENOMINATOR_MAX * (ssdn - ssdn_p1))
+            ssdn_p2 = round(self.DENOMINATOR_MAX * (ssdn - ssdn_p1))
             ssdn_p3 = self.DENOMINATOR_MAX
 
             ssup_p1 = 0
@@ -229,12 +229,12 @@ class Si5351(Si5351A_B_GT):
 
             ssup = 128 * self.pll.divider * ssc_amp / ((1 - ssc_amp) * ssudp)
             ssup_p1 = math.floor(ssup)
-            ssup_p2 = math.floor(self.DENOMINATOR_MAX * (ssup - ssup_p1))
+            ssup_p2 = round(self.DENOMINATOR_MAX * (ssup - ssup_p1))
             ssup_p3 = self.DENOMINATOR_MAX
 
             ssdn = 128 * self.pll.divider * ssc_amp / ((1 + ssc_amp) * ssudp)
             ssdn_p1 = math.floor(ssdn)
-            ssdn_p2 = math.floor(self.DENOMINATOR_MAX * (ssdn - ssdn_p1))
+            ssdn_p2 = round(self.DENOMINATOR_MAX * (ssdn - ssdn_p1))
             ssdn_p3 = self.DENOMINATOR_MAX
 
             self._set_parameters('UDP', ssudp, 0, 1)

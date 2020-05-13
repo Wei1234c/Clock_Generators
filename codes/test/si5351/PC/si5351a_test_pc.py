@@ -68,6 +68,11 @@ clk.set_frequency(50.2e6)
 # clk.set_frequency(149999976)
 
 
+# si.spread_spectrum.enable(True, mode = 'center', ssc_amp = 0.01)
+# si.spread_spectrum.enable(True, mode = 'down', ssc_amp = 0.01)
+# si.spread_spectrum.enable(False)
+
+
 print(si.read_all_registers())
 # clk.set_frequency(900e6 / 6.5)
 # clk.set_frequency(900e6 / 8.5)

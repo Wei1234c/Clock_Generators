@@ -26,6 +26,11 @@ def _value_key(dictionary):
 
 
 
+def _freq_trim(n):
+    return round(n)
+
+
+
 class Si5351A_B_GT(Device):
     I2C_ADDRESS = 0x60
     READ_ONLY_REGISTERS = (0,)
@@ -142,7 +147,7 @@ class Si5351A_B_GT(Device):
 
         @property
         def freq(self):
-            return math.floor(self.source.freq / self.divider)
+            return _freq_trim(self.source.freq / self.divider)
 
 
         def set_frequency(self, freq):
@@ -202,7 +207,7 @@ class Si5351A_B_GT(Device):
                                                                        divider,
                                                                        self.DIVIDER_MAX)
             a = math.floor(divider)
-            b = math.floor(self.denominator_max * (divider - a))
+            b = round(self.denominator_max * (divider - a))
             c = self.denominator_max  # vcxo and pll use different denominators to fill up P3 register value,
 
             _is_even_integer = self._is_even_integer(divider)
@@ -287,7 +292,7 @@ class Si5351A_B_GT(Device):
 
         @property
         def freq(self):
-            freq = math.floor(self.source.freq * self.divider)  # using "*", not "/" for PLL
+            freq = _freq_trim(self.source.freq * self.divider)  # using "*", not "/" for PLL
 
             assert self.FREQ_VCO_MIN <= freq <= self.FREQ_VCO_MAX, 'Fvco must be between {:0.2e} ~ {:0.2e} Hz.'.format(
                 self.FREQ_VCO_MIN, self.FREQ_VCO_MAX)
@@ -570,7 +575,7 @@ class Si5351A_B_GT(Device):
 
                     # try setting divider and therefore frequency
                     for d in sorted(self.R_DIVIDERs.keys()):
-                        if math.floor(self.multisynth.freq / d) == math.floor(freq):  # match, do it within R.
+                        if _freq_trim(self.multisynth.freq / d) == _freq_trim(freq):  # match, do it within R.
                             self._set_divider(d)
                             self._frequency = freq
                             return True
@@ -589,7 +594,7 @@ class Si5351A_B_GT(Device):
 
             else:  # source (Xtalk, Clkin) with fixed frequency
                 for d in self.R_DIVIDERs.keys():
-                    if math.floor(self.source.freq / d) == math.floor(freq):
+                    if _freq_trim(self.source.freq / d) == _freq_trim(freq):
                         self._set_divider(d)
                         self._frequency = freq
                         return True
@@ -710,7 +715,7 @@ class Si5351A_B_GT(Device):
 
                 my_period = 1 / self.freq
                 offset_seconds = cycle * my_period
-                offset = int(round(offset_seconds * 4 * freq_vco))
+                offset = round(offset_seconds * 4 * freq_vco)
                 self._set_phase_offset(offset)
 
                 if phase != 0:
@@ -767,7 +772,7 @@ class Si5351A_B_GT(Device):
 
         @property
         def freq(self):
-            return math.floor(self._freq / self.divider)
+            return _freq_trim(self._freq / self.divider)
 
 
         def set_frequency(self, freq):
