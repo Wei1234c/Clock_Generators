@@ -1031,11 +1031,11 @@ class Si5351A_B_GT(Device):
     def _write_register(self, register, reset = False):
         if register.address not in self.READ_ONLY_REGISTERS:
             super()._write_register(register, reset = reset)
-            return self._bus.write_byte(self._i2c_address, register.address, register.value)
+            return self._bus.write_addressed_byte(self._i2c_address, register.address, register.value)
 
 
     def _read_register(self, register):
-        value = self._bus.read_byte(self._i2c_address, register.address)
+        value = self._bus.read_addressed_byte(self._i2c_address, register.address)
         self._show_bus_data(bytes([value]), address = register.address, reading = True)
         self._print_register(register)
         return value
