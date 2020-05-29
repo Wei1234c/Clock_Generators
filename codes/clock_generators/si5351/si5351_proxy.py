@@ -1,7 +1,7 @@
-try:
-    from utilities.adapters.peripherals import I2C
-except:
-    from peripherals import I2C
+# try:
+#     from utilities.adapters.peripherals import I2C
+# except:
+#     from peripherals import I2C
 
 
 
@@ -35,11 +35,11 @@ class Si5351_proxy:
 
 
     def read_register(self, reg_address):
-        return self._bus.read_byte(self._i2c_address, reg_address)
+        return self._bus.read_addressed_byte(self._i2c_address, reg_address)
 
 
     def write_register(self, reg_address, value):
-        return self._bus.write_byte(self._i2c_address, reg_address, value)
+        return self._bus.write_addressed_byte(self._i2c_address, reg_address, value)
 
 
     def read_all_registers(self):

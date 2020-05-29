@@ -13,7 +13,7 @@ registers_values = [(0, 0), (1, 0), (2, 0), (3, 0), (9, 0), (15, 0), (16, 79), (
                     (162, 0), (163, 0), (164, 0), (165, 0), (166, 0), (167, 0), (168, 0), (169, 0), (170, 0),
                     (177, 160), (183, 210), (187, 208)]
 
-with_hardware_device = True
+with_hardware_device = False
 
 if with_hardware_device:
     _i2c = I2C.get_Ftdi_i2c()
